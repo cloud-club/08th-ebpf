@@ -1,0 +1,8 @@
+{
+    "terminal.integrated.profiles.osx": {
+      "manage shell": {
+        "path": "${workspaceFolder}/manage",
+        "args": ["shell"]
+      }
+    }
+}

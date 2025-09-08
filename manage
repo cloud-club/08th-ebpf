@@ -1,0 +1,42 @@
+#!/bin/bash
+
+set -euo pipefail
+BASEDIR=$(dirname $0)
+source ${BASEDIR}/scripts/_utils.sh
+source ${BASEDIR}/scripts/_config.sh
+
+help() {
+  echo "Usage: $0 {bootstrap|launch|provision|destroy|uninstall}"
+  echo
+  echo "VM 관리 명령어:"
+  echo -e "  launch    \tVM 기동 (VM 생성 및 개발환경 설정)"
+  echo -e "  shell     \tVM 내부 셸 접근"
+  echo -e "  destroy   \tVM 삭제"
+  exit 0
+}
+
+vm_name=${config_vm_name}
+cmd=${1:-help}
+case $cmd in
+
+  launch)
+    log "VM 생성 및 기동 [name=${vm_name}]"
+    ${BASEDIR}/scripts/launch.sh
+    ${BASEDIR}/scripts/provision.sh
+    ;;
+
+  shell)
+    log "VM 셸 접속 [name=${vm_name}]"
+    orbctl shell -m ${vm_name} /bin/bash
+    ;;
+
+  destroy)
+    log "VM 삭제"
+    orbctl stop -f ${vm_name}
+    orbctl delete ${vm_name}
+    ;;
+
+  *)
+    help
+    ;;
+esac
