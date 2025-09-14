@@ -23,5 +23,6 @@ sudo apt update \
   bpftool \
   graphviz \
   net-tools \
+  bpftrace \
 && sudo apt autoremove --yes --allow-remove-essential \
 && sudo apt clean
