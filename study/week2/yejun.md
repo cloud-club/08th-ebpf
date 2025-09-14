@@ -104,6 +104,9 @@ user space의 C 소스로 해당 Maps에 접근하여 통계 등 활용
         perror("bpf_map_lookup_elem");
     }
 ```
+- bpf_obj_get()로 커널에 로드된 Map 접근
+- bpf_map_lookup_elem()로 Key 기반 값 조회
+- 필요하면 bpf_map_update_elem()로 값 갱신 가능
 ___
 
 자세한 내용은 해당 docs 참고: https://ebpf.io/what-is-ebpf
