@@ -8,6 +8,8 @@ import (
 	"syscall"
 
 	"ebpf-route/internal/config"
+	"ebpf-route/pkg/ebpf"
+	"ebpf-route/pkg/routing"
 	"github.com/spf13/cobra"
 )
 
@@ -58,13 +60,17 @@ func runRouter(cmd *cobra.Command, args []string) {
 		log.Fatalf("설정 로드 실패: %v", err)
 	}
 
-	// eBPF 라우터 생성 및 시작
-	router, err := NewEBPFRouter(cfg)
+	// 라우팅 테이블 생성
+	routingTable := routing.NewTable(cfg.Router.MaxRules)
+
+	// eBPF 관리자 생성
+	ebpfManager, err := ebpf.NewManager(cfg, routingTable)
 	if err != nil {
-		log.Fatalf("라우터 생성 실패: %v", err)
+		log.Fatalf("eBPF 관리자 생성 실패: %v", err)
 	}
 
-	if err := router.Start(); err != nil {
+	// 라우터 시작
+	if err := ebpfManager.Start(); err != nil {
 		log.Fatalf("라우터 시작 실패: %v", err)
 	}
 
@@ -79,49 +85,9 @@ func runRouter(cmd *cobra.Command, args []string) {
 	<-sigChan
 
 	// 라우터 정리 작업
-	if err := router.Stop(); err != nil {
+	if err := ebpfManager.Stop(); err != nil {
 		log.Printf("라우터 정리 중 오류: %v", err)
 	}
 
 	fmt.Println("라우터가 정상적으로 종료되었습니다.")
-}
-
-// EBPFRouter는 eBPF 라우터의 메인 구조체입니다
-type EBPFRouter struct {
-	config *config.Config
-}
-
-// NewEBPFRouter는 새로운 eBPF 라우터를 생성합니다
-func NewEBPFRouter(cfg *config.Config) (*EBPFRouter, error) {
-	return &EBPFRouter{
-		config: cfg,
-	}, nil
-}
-
-// Start는 라우터를 시작합니다
-func (r *EBPFRouter) Start() error {
-	fmt.Println("eBPF 프로그램 로딩 중...")
-	// TODO: 실제 eBPF 프로그램 로드
-
-	fmt.Println("라우팅 규칙 설정 중...")
-	// TODO: 라우팅 규칙 맵에 로드
-
-	fmt.Printf("인터페이스 '%s'에 XDP 프로그램 연결 중...\n", r.config.Network.Interface)
-	// TODO: XDP 프로그램을 네트워크 인터페이스에 연결
-
-	return nil
-}
-
-// Stop은 라우터를 정리하고 종료합니다
-func (r *EBPFRouter) Stop() error {
-	fmt.Println("eBPF 프로그램 정리 중...")
-	// TODO: eBPF 프로그램 언로드
-
-	fmt.Println("라우팅 규칙 정리 중...")
-	// TODO: 라우팅 규칙 맵 정리
-
-	fmt.Printf("인터페이스 '%s'에서 XDP 프로그램 분리 중...\n", r.config.Network.Interface)
-	// TODO: XDP 프로그램을 네트워크 인터페이스에서 분리
-
-	return nil
 }
