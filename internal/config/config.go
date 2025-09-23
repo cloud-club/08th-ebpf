@@ -10,9 +10,10 @@ import (
 
 // Config는 라우터의 전체 설정을 담는 구조체입니다
 type Config struct {
-	Router  RouterConfig  `yaml:"router" mapstructure:"router"`
-	Network NetworkConfig `yaml:"network" mapstructure:"network"`
-	Logging LoggingConfig `yaml:"logging" mapstructure:"logging"`
+	Router       RouterConfig   `yaml:"router" mapstructure:"router"`
+	Network      NetworkConfig  `yaml:"network" mapstructure:"network"`
+	Logging      LoggingConfig  `yaml:"logging" mapstructure:"logging"`
+	RoutingRules []*RoutingRule `yaml:"routing_rules" mapstructure:"routing_rules"`
 }
 
 // RouterConfig는 라우터 동작 설정입니다
@@ -93,15 +94,78 @@ func (c *Config) Validate() error {
 
 	// 인터페이스 확인
 	if c.Network.Interface != "" {
-		// TODO: 개발 중에는 lo, lo0 둘 다 허용
 		if c.Network.Interface == "lo" || c.Network.Interface == "lo0" {
-			return nil
+			// 루프백 인터페이스는 항상 허용
+		} else {
+			if _, err := net.InterfaceByName(c.Network.Interface); err != nil {
+				fmt.Printf("경고: 네트워크 인터페이스 '%s'를 찾을 수 없습니다: %v\n", c.Network.Interface, err)
+			}
 		}
+	}
 
-		if _, err := net.InterfaceByName(c.Network.Interface); err != nil {
-			fmt.Printf("경고: 네트워크 인터페이스 '%s'를 찾을 수 없습니다: %v\n", c.Network.Interface, err)
-			// TODO: 개발 중에는 에러로 처리하지 않음
+	// 라우팅 규칙 검증
+	for i, rule := range c.RoutingRules {
+		if err := validateRoutingRule(rule); err != nil {
+			return fmt.Errorf("라우팅 규칙 %d 검증 실패: %w", i+1, err)
 		}
+	}
+
+	return nil
+}
+
+// validateRoutingRule은 라우팅 규칙의 유효성을 검사합니다
+func validateRoutingRule(rule *RoutingRule) error {
+	if rule.ID <= 0 {
+		return fmt.Errorf("규칙 ID는 0보다 커야 합니다: %d", rule.ID)
+	}
+
+	if rule.Name == "" {
+		return fmt.Errorf("규칙 이름이 필요합니다")
+	}
+
+	// IP 주소 검증
+	if rule.SrcIP != "" {
+		if _, _, err := net.ParseCIDR(rule.SrcIP); err != nil {
+			if net.ParseIP(rule.SrcIP) == nil {
+				return fmt.Errorf("잘못된 소스 IP 형식: %s", rule.SrcIP)
+			}
+		}
+	}
+
+	if rule.DstIP != "" {
+		if _, _, err := net.ParseCIDR(rule.DstIP); err != nil {
+			if net.ParseIP(rule.DstIP) == nil {
+				return fmt.Errorf("잘못된 목적지 IP 형식: %s", rule.DstIP)
+			}
+		}
+	}
+
+	// 포트 검증
+	if rule.DstPort < 0 || rule.DstPort > 65535 {
+		return fmt.Errorf("잘못된 포트 번호: %d", rule.DstPort)
+	}
+
+	// 프로토콜 검증
+	if rule.Protocol != "" {
+		validProtocols := map[string]bool{
+			"tcp": true, "udp": true, "icmp": true,
+		}
+		if !validProtocols[rule.Protocol] {
+			return fmt.Errorf("지원되지 않는 프로토콜: %s", rule.Protocol)
+		}
+	}
+
+	// 액션 검증
+	validActions := map[string]bool{
+		"pass": true, "drop": true, "redirect": true,
+	}
+	if !validActions[rule.Action] {
+		return fmt.Errorf("지원되지 않는 액션: %s", rule.Action)
+	}
+
+	// 우선순위 검증
+	if rule.Priority < 0 || rule.Priority > 100 {
+		return fmt.Errorf("우선순위는 0-100 범위여야 합니다: %d", rule.Priority)
 	}
 
 	return nil
