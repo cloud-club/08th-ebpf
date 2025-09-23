@@ -1,0 +1,4 @@
+pkg/bpf/*_x86*
+pkg/bpf/*_arm64*
+
+main
