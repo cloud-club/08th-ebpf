@@ -37,11 +37,24 @@ func (m *Manager) Start() error {
 		return fmt.Errorf("failed to load eBPF program: %v", err)
 	}
 
+	// 설정 파일에서 규칙 로드
+	if len(m.config.RoutingRules) > 0 {
+		fmt.Printf("설정 파일에서 %d개 규칙 로드 중...\n", len(m.config.RoutingRules))
+		err = m.table.LoadRules(m.config.RoutingRules)
+		if err != nil {
+			return fmt.Errorf("설정 파일 규칙 로드 실패: %v", err)
+		}
+	}
+
 	// 규칙을 eBPF 맵에 업데이트
 	activeRules := m.table.ListActiveRules()
-	err = m.loader.UpdateRules(activeRules)
-	if err != nil {
-		return fmt.Errorf("failed to update eBPF rules: %v", err)
+	if len(activeRules) > 0 {
+		err = m.loader.UpdateRules(activeRules)
+		if err != nil {
+			return fmt.Errorf("failed to update eBPF rules: %v", err)
+		}
+	} else {
+		fmt.Println("활성화된 규칙이 없습니다.")
 	}
 
 	// 주기적 업데이트 시작
@@ -91,12 +104,9 @@ func (m *Manager) stopUpdateLoop() {
 func (m *Manager) periodicUpdate() {
 	stats := m.table.GetStats()
 	if stats.ActiveRules > 0 {
-		fmt.Printf("규칙 상태 체크: %d개 활성 규칙 실행 중 (패킷 처리: %d개)\n",
-			stats.ActiveRules, stats.PacketCount)
+		fmt.Printf("규칙 상태 체크: %d개 활성 규칙 실행 중 (총 규칙: %d개)\n",
+			stats.ActiveRules, stats.TotalRules)
 	}
-
-	// TODO: eBPF 맵에서 통계 정보 수집
-	// TODO: 규칙 변경사항이 있으면 eBPF 맵 업데이트
 }
 
 func (m *Manager) AddRule(rule *config.RoutingRule) error {

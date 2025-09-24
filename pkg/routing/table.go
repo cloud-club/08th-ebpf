@@ -168,7 +168,6 @@ func (t *Table) LoadRules(rules []*config.RoutingRule) error {
 		// 규칙 복사본 저장
 		ruleCopy := *rule
 		t.rules[rule.ID] = &ruleCopy
-		fmt.Printf("규칙 로드됨: ID=%d, Name=%s\n", rule.ID, rule.Name)
 	}
 
 	t.updateStats()

@@ -1,8 +1,9 @@
 package ebpf
 
 import (
-	"ebpf-route/internal/config"
 	"fmt"
+
+	"ebpf-route/internal/config"
 )
 
 type Loader struct {
@@ -63,10 +64,12 @@ func (l *Loader) simulateLoad() error {
 		return fmt.Errorf("network interface is not specified")
 	}
 
+	fmt.Printf("시뮬레이션: eBPF 프로그램이 인터페이스 '%s'에 로드되었습니다\n", l.ifName)
 	return nil
 }
 
 func (l *Loader) simulateUnload() error {
+	fmt.Printf("시뮬레이션: eBPF 프로그램이 인터페이스 '%s'에서 언로드되었습니다\n", l.ifName)
 	return nil
 }
 
@@ -75,12 +78,29 @@ func (l *Loader) UpdateRules(rules []*config.RoutingRule) error {
 		return fmt.Errorf("eBPF program is not loaded")
 	}
 
+	fmt.Printf("시뮬레이션: %d개 규칙 업데이트\n", len(rules))
 	for _, rule := range rules {
 		if rule.Enabled {
-			fmt.Printf("  - 규칙 %d: %s (%s -> %s)\n",
-				rule.ID, rule.Action, rule.SrcIP, rule.DstIP)
+			srcIP := rule.SrcIP
+			if srcIP == "" {
+				srcIP = "*"
+			}
+			dstIP := rule.DstIP
+			if dstIP == "" {
+				dstIP = "*"
+			}
+			dstPort := ""
+			if rule.DstPort > 0 {
+				dstPort = fmt.Sprintf(":%d", rule.DstPort)
+			}
+			protocol := rule.Protocol
+			if protocol == "" {
+				protocol = "any"
+			}
+
+			fmt.Printf("  - 규칙 %d: %s %s -> %s%s (%s) [우선순위: %d]\n",
+				rule.ID, rule.Action, srcIP, dstIP, dstPort, protocol, rule.Priority)
 		}
 	}
-
 	return nil
 }
