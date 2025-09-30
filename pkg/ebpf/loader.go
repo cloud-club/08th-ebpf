@@ -144,10 +144,10 @@ func (l *Loader) compileEBPF() (string, error) {
 		"-o", tmpFile.Name(),
 		"-I", "bpf",
 		"-I", "/usr/include",
-		"-I", "/usr/include/x86_64-linux-gnu",
+		"-I", "/usr/include/aarch64-linux-gnu",
 		"-I", "/usr/include/asm-generic",
 		"-D__BPF_TRACING__",
-		"-D__TARGET_ARCH_x86",
+		"-D__TARGET_ARCH_arm64",
 	}
 
 	// clang 실행
