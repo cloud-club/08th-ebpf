@@ -1,10 +1,10 @@
 router:
-  default_action: "pass"
+  default_action: "drop"
   update_interval: "5s"
   max_rules: 100
 
 network:
-  interface: "lo"
+  interface: "eth0"
 
 logging:
   level: "info"
