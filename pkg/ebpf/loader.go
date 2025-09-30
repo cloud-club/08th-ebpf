@@ -143,6 +143,11 @@ func (l *Loader) compileEBPF() (string, error) {
 		"-c", "bpf/xdp_router.c",
 		"-o", tmpFile.Name(),
 		"-I", "bpf",
+		"-I", "/usr/include",
+		"-I", "/usr/include/x86_64-linux-gnu",
+		"-I", "/usr/include/asm-generic",
+		"-D__BPF_TRACING__",
+		"-D__TARGET_ARCH_x86",
 	}
 
 	// clang 실행
