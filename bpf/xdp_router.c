@@ -151,8 +151,7 @@ int xdp_router_main(struct xdp_md *ctx) {
         update_stats(action);
 
         // 디버그 정보
-        bpf_printk("Rule %d matched: src_port=%d dst_port=%d action=%d\n",
-                  matched_rule->id, pkt_info.src_port, pkt_info.dst_port, action);
+        bpf_printk("Rule %d matched action=%d\n", matched_rule->id, action);
     }
 
     // 액션에 따른 XDP 리턴 코드
