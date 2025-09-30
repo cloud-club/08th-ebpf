@@ -14,7 +14,7 @@ logging:
 routing_rules:
   - id: 1
     name: "SSH 차단"
-    src_ip: "192.168.1.0/24"
+    src_ip: ""
     dst_ip: ""
     dst_port: 22
     protocol: "tcp"
