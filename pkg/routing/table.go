@@ -44,7 +44,7 @@ func (t *Table) AddRule(rule *config.RoutingRule) error {
 	defer t.mu.Unlock()
 
 	if len(t.rules) >= t.maxRules {
-		return fmt.Errorf("최대 규칙 수를 초과했습니다 (%d)", t.maxRules)
+		return fmt.Errorf("최대 규칙 수를 초과했습니다: %d", t.maxRules)
 	}
 
 	if _, exists := t.rules[rule.ID]; exists {
@@ -105,7 +105,7 @@ func (t *Table) ListActiveRules() []*config.RoutingRule {
 	// 우선순위 순으로 정렬
 	sort.Slice(rules, func(i, j int) bool {
 		if rules[i].Priority != rules[j].Priority {
-			return rules[i].Priority > rules[j].Priority
+			return rules[i].Priority < rules[j].Priority
 		}
 		// 우선순위가 같으면 ID 순으로
 		return rules[i].ID < rules[j].ID
@@ -149,6 +149,7 @@ func (t *Table) DisableRule(id int) error {
 }
 
 // LoadRules는 여러 규칙을 한 번에 로드합니다
+// 초기 규칙 로드 시 사용
 func (t *Table) LoadRules(rules []*config.RoutingRule) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()

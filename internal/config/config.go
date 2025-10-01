@@ -41,10 +41,10 @@ type RoutingRule struct {
 	SrcIP    string `yaml:"src_ip" mapstructure:"src_ip"`
 	DstIP    string `yaml:"dst_ip" mapstructure:"dst_ip"`
 	DstPort  int    `yaml:"dst_port" mapstructure:"dst_port"`
-	Protocol string `yaml:"protocol" mapstructure:"protocol"`
-	Action   string `yaml:"action" mapstructure:"action"`
-	Priority int    `yaml:"priority" mapstructure:"priority"`
-	Enabled  bool   `yaml:"enabled" mapstructure:"enabled"`
+	Protocol string `yaml:"protocol" mapstructure:"protocol"` // 프로토콜 (tcp/udp/icmp)
+	Action   string `yaml:"action" mapstructure:"action"`     // 액션 (pass/drop/redirect)
+	Priority int    `yaml:"priority" mapstructure:"priority"` // 우선순위 (0-100)
+	Enabled  bool   `yaml:"enabled" mapstructure:"enabled"`   // 활성화 여부
 }
 
 // LoadConfig는 설정 파일을 로드합니다
@@ -73,7 +73,7 @@ func LoadConfig(configPath string) (*Config, error) {
 
 // setDefaults는 기본 설정값을 지정합니다
 func setDefaults() {
-	viper.SetDefault("router.default_action", "pass")
+	viper.SetDefault("router.default_action", "drop")
 	viper.SetDefault("router.update_interval", "5s")
 	viper.SetDefault("router.max_rules", 100)
 	viper.SetDefault("network.interface", "lo")
@@ -89,7 +89,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.Router.DefaultAction != "pass" && c.Router.DefaultAction != "drop" {
-		return fmt.Errorf("잘못된 기본 액션: '%s' (pass 또는 drop만 가능)", c.Router.DefaultAction)
+		return fmt.Errorf("잘못된 기본 액션: %s (pass 또는 drop만 가능)", c.Router.DefaultAction)
 	}
 
 	// 인터페이스 확인
@@ -98,7 +98,7 @@ func (c *Config) Validate() error {
 			// 루프백 인터페이스는 항상 허용
 		} else {
 			if _, err := net.InterfaceByName(c.Network.Interface); err != nil {
-				fmt.Printf("경고: 네트워크 인터페이스 '%s'를 찾을 수 없습니다: %v\n", c.Network.Interface, err)
+				fmt.Printf("네트워크 인터페이스 %s를 찾을 수 없음: %v\n", c.Network.Interface, err)
 			}
 		}
 	}
@@ -116,7 +116,7 @@ func (c *Config) Validate() error {
 // validateRoutingRule은 라우팅 규칙의 유효성을 검사합니다
 func validateRoutingRule(rule *RoutingRule) error {
 	if rule.ID <= 0 {
-		return fmt.Errorf("규칙 ID는 0보다 커야 합니다: %d", rule.ID)
+		return fmt.Errorf("규칙 ID는 0보다 커야 함: %d", rule.ID)
 	}
 
 	if rule.Name == "" {
@@ -165,7 +165,7 @@ func validateRoutingRule(rule *RoutingRule) error {
 
 	// 우선순위 검증
 	if rule.Priority < 0 || rule.Priority > 100 {
-		return fmt.Errorf("우선순위는 0-100 범위여야 합니다: %d", rule.Priority)
+		return fmt.Errorf("우선순위는 0-100 범위여야 함: %d", rule.Priority)
 	}
 
 	return nil
