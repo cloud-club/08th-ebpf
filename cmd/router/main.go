@@ -10,6 +10,7 @@ import (
 	"ebpf-route/internal/config"
 	"ebpf-route/pkg/ebpf"
 	"ebpf-route/pkg/routing"
+
 	"github.com/spf13/cobra"
 )
 
@@ -46,15 +47,15 @@ func init() {
 }
 
 func runRouter(cmd *cobra.Command, args []string) {
-	fmt.Printf("eBPF Router %s 시작 중...\n", version)
+	fmt.Printf("🚀 eBPF Router %s\n", version)
 
 	// root 권한 확인
 	if os.Geteuid() != 0 {
-		log.Fatal("eBPF 프로그램을 로드하려면 root 권한이 필요합니다 (sudo 사용)")
+		log.Fatal("eBPF 프로그램을 로드하려면 root 권한이 필요합니다")
 	}
 
 	// 설정 파일 로드
-	fmt.Printf("설정 파일 로드 중: %s\n", configFile)
+	fmt.Printf("설정 파일 로드: %s\n", configFile)
 	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
 		log.Fatalf("설정 로드 실패: %v", err)
