@@ -105,6 +105,9 @@ static __always_inline void update_stats(__u8 action) {
             case ACTION_PASS:
                 __sync_fetch_and_add(&stats->passed_packets, 1); // 통과된 패킷 수 증가
                 break;
+            case ACTION_REDIRECT:
+                __sync_fetch_and_add(&stats->redirected_packets, 1); // 리다이렉트된 패킷 수 증가
+                break;
         }
 
         __sync_fetch_and_add(&stats->matched_packets, 1); // 매칭된 패킷 수 증가

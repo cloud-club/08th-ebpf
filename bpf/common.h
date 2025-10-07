@@ -58,6 +58,7 @@ struct packet_stats {
     __u64 matched_packets;
     __u64 dropped_packets;
     __u64 passed_packets;
+    __u64 redirected_packets;
     __u64 last_updated;
 };
 
