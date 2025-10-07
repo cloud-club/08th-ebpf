@@ -65,7 +65,7 @@ func runRouter(cmd *cobra.Command, args []string) {
 	routingTable := routing.NewTable(cfg.Router.MaxRules)
 
 	// eBPF 관리자 생성
-	ebpfManager, err := ebpf.NewManager(cfg, routingTable)
+	ebpfManager, err := ebpf.NewManager(cfg, routingTable, configFile)
 	if err != nil {
 		log.Fatalf("eBPF 관리자 생성 실패: %v", err)
 	}
