@@ -49,6 +49,6 @@ routing_rules:
     dst_port: 443
     protocol: "tcp"
     action: "redirect"
-    redirect_interface: "eth1"
+    redirect_interface: "lo"
     priority: 15
     enabled: true

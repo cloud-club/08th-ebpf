@@ -321,7 +321,7 @@ func (l *Loader) getInterfaceIndex(ifName string) (int, error) {
 	return iface.Index, nil
 }
 
-// parseCIDR는 CIDR 표기법을 IP 주소와 마스크로 변환합니다
+// parseCIDR는 CIDR 표기법 또는 단일 IP 주소를 IP 주소와 마스크로 변환합니다
 func parseCIDR(cidr string) (uint32, uint32, error) {
 	if cidr == "" {
 		return 0, 0, nil // 빈 문자열은 모든 IP 허용
@@ -329,7 +329,10 @@ func parseCIDR(cidr string) (uint32, uint32, error) {
 
 	// CIDR 표기법 파싱 (예: "192.168.1.0/24")
 	parts := strings.Split(cidr, "/")
-	if len(parts) != 2 {
+	if len(parts) == 1 {
+		// 단일 IP 주소인 경우 /32 마스크 적용
+		parts = append(parts, "32")
+	} else if len(parts) != 2 {
 		return 0, 0, fmt.Errorf("invalid CIDR format: %s", cidr)
 	}
 
