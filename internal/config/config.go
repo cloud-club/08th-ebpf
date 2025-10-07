@@ -36,15 +36,16 @@ type LoggingConfig struct {
 
 // RoutingRule은 패킷 라우팅 규칙을 정의합니다
 type RoutingRule struct {
-	ID       int    `yaml:"id" mapstructure:"id"`
-	Name     string `yaml:"name" mapstructure:"name"`
-	SrcIP    string `yaml:"src_ip" mapstructure:"src_ip"`
-	DstIP    string `yaml:"dst_ip" mapstructure:"dst_ip"`
-	DstPort  int    `yaml:"dst_port" mapstructure:"dst_port"`
-	Protocol string `yaml:"protocol" mapstructure:"protocol"` // 프로토콜 (tcp/udp/icmp)
-	Action   string `yaml:"action" mapstructure:"action"`     // 액션 (pass/drop/redirect)
-	Priority int    `yaml:"priority" mapstructure:"priority"` // 우선순위 (0-100)
-	Enabled  bool   `yaml:"enabled" mapstructure:"enabled"`   // 활성화 여부
+	ID                int    `yaml:"id" mapstructure:"id"`
+	Name              string `yaml:"name" mapstructure:"name"`
+	SrcIP             string `yaml:"src_ip" mapstructure:"src_ip"`
+	DstIP             string `yaml:"dst_ip" mapstructure:"dst_ip"`
+	DstPort           int    `yaml:"dst_port" mapstructure:"dst_port"`
+	Protocol          string `yaml:"protocol" mapstructure:"protocol"`                     // 프로토콜 (tcp/udp/icmp)
+	Action            string `yaml:"action" mapstructure:"action"`                         // 액션 (pass/drop/redirect)
+	RedirectInterface string `yaml:"redirect_interface" mapstructure:"redirect_interface"` // 리다이렉트 대상 인터페이스
+	Priority          int    `yaml:"priority" mapstructure:"priority"`                     // 우선순위 (0-100)
+	Enabled           bool   `yaml:"enabled" mapstructure:"enabled"`                       // 활성화 여부
 }
 
 // LoadConfig는 설정 파일을 로드합니다

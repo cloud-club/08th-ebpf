@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"ebpf-route/internal/config"
@@ -16,10 +17,10 @@ import (
 
 type Loader struct {
 	config     *config.Config
-	ifName     string
-	loaded     bool
-	collection *ebpf.Collection
-	link       link.Link
+	ifName     string           // 인터페이스 이름
+	loaded     bool             // 로드 상태
+	collection *ebpf.Collection // eBPF 컬렉션
+	link       link.Link        // XDP 링크
 }
 
 func NewLoader(cfg *config.Config) (*Loader, error) {
@@ -214,8 +215,13 @@ func (l *Loader) UpdateRules(rules []*config.RoutingRule) error {
 				protocol = "any"
 			}
 
-			fmt.Printf("  - 규칙 %d: %s %s -> %s%s (%s) [우선순위: %d]\n",
-				rule.ID, rule.Action, srcIP, dstIP, dstPort, protocol, rule.Priority)
+			redirectInfo := ""
+			if rule.Action == "redirect" && rule.RedirectInterface != "" {
+				redirectInfo = fmt.Sprintf(" -> %s", rule.RedirectInterface)
+			}
+
+			fmt.Printf("  - 규칙 %d: %s %s -> %s%s (%s)%s [우선순위: %d]\n",
+				rule.ID, rule.Action, srcIP, dstIP, dstPort, protocol, redirectInfo, rule.Priority)
 		}
 	}
 	return nil
@@ -223,17 +229,18 @@ func (l *Loader) UpdateRules(rules []*config.RoutingRule) error {
 
 // eBPF 규칙 구조체 (C 구조체와 일치)
 type EBPFRule struct {
-	ID        uint32
-	SrcIP     uint32
-	DstIP     uint32
-	SrcIPMask uint32
-	DstIPMask uint32
-	SrcPort   uint16
-	DstPort   uint16
-	Protocol  uint8
-	Action    uint8
-	Priority  uint8
-	Enabled   uint8
+	ID                uint32
+	SrcIP             uint32
+	DstIP             uint32
+	SrcIPMask         uint32
+	DstIPMask         uint32
+	SrcPort           uint16
+	DstPort           uint16
+	Protocol          uint8
+	Action            uint8
+	Priority          uint8
+	Enabled           uint8
+	RedirectInterface uint32 // 리다이렉트 대상 인터페이스 인덱스
 }
 
 func (l *Loader) convertToEBPFRule(rule *config.RoutingRule) EBPFRule {
@@ -243,6 +250,19 @@ func (l *Loader) convertToEBPFRule(rule *config.RoutingRule) EBPFRule {
 		DstPort:  uint16(rule.DstPort),
 		Priority: uint8(rule.Priority),
 		Enabled:  uint8(1),
+	}
+
+	// 리다이렉트 인터페이스 처리
+	if rule.Action == "redirect" && rule.RedirectInterface != "" {
+		ifIndex, err := l.getInterfaceIndex(rule.RedirectInterface)
+		if err != nil {
+			fmt.Printf("경고: 리다이렉트 인터페이스 %s를 찾을 수 없음: %v\n", rule.RedirectInterface, err)
+			ebpfRule.RedirectInterface = 0 // 기본값: 같은 인터페이스
+		} else {
+			ebpfRule.RedirectInterface = uint32(ifIndex)
+		}
+	} else {
+		ebpfRule.RedirectInterface = 0 // 기본값: 같은 인터페이스
 	}
 
 	// 액션 변환
@@ -269,18 +289,25 @@ func (l *Loader) convertToEBPFRule(rule *config.RoutingRule) EBPFRule {
 		ebpfRule.Protocol = 0 // any
 	}
 
-	// IP 주소 변환 (TODO: 실제 IP 파싱 구현)
-	// 현재는 간단한 예시
+	// IP 주소 변환 (실제 CIDR 파싱)
 	if rule.SrcIP != "" {
-		// CIDR 파싱 및 변환 필요
-		ebpfRule.SrcIP = 0xC0A80100     // 192.168.1.0 예시
-		ebpfRule.SrcIPMask = 0xFFFFFF00 // /24 예시
+		srcIP, srcMask, err := parseCIDR(rule.SrcIP)
+		if err != nil {
+			fmt.Printf("경고: 소스 IP 파싱 실패 (%s): %v\n", rule.SrcIP, err)
+		} else {
+			ebpfRule.SrcIP = srcIP
+			ebpfRule.SrcIPMask = srcMask
+		}
 	}
 
 	if rule.DstIP != "" {
-		// CIDR 파싱 및 변환 필요
-		ebpfRule.DstIP = 0xC0A80100     // 192.168.1.0 예시
-		ebpfRule.DstIPMask = 0xFFFFFF00 // /24 예시
+		dstIP, dstMask, err := parseCIDR(rule.DstIP)
+		if err != nil {
+			fmt.Printf("경고: 목적지 IP 파싱 실패 (%s): %v\n", rule.DstIP, err)
+		} else {
+			ebpfRule.DstIP = dstIP
+			ebpfRule.DstIPMask = dstMask
+		}
 	}
 
 	return ebpfRule
@@ -292,4 +319,48 @@ func (l *Loader) getInterfaceIndex(ifName string) (int, error) {
 		return 0, fmt.Errorf("interface %s not found: %v", ifName, err)
 	}
 	return iface.Index, nil
+}
+
+// parseCIDR는 CIDR 표기법을 IP 주소와 마스크로 변환합니다
+func parseCIDR(cidr string) (uint32, uint32, error) {
+	if cidr == "" {
+		return 0, 0, nil // 빈 문자열은 모든 IP 허용
+	}
+
+	// CIDR 표기법 파싱 (예: "192.168.1.0/24")
+	parts := strings.Split(cidr, "/")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("invalid CIDR format: %s", cidr)
+	}
+
+	// IP 주소 파싱
+	ip := net.ParseIP(parts[0])
+	if ip == nil {
+		return 0, 0, fmt.Errorf("invalid IP address: %s", parts[0])
+	}
+
+	// IPv4만 지원
+	ipv4 := ip.To4()
+	if ipv4 == nil {
+		return 0, 0, fmt.Errorf("only IPv4 addresses are supported: %s", parts[0])
+	}
+
+	// 마스크 비트 수 파싱
+	maskBits, err := strconv.Atoi(parts[1])
+	if err != nil || maskBits < 0 || maskBits > 32 {
+		return 0, 0, fmt.Errorf("invalid mask bits: %s", parts[1])
+	}
+
+	// IP 주소를 uint32로 변환 (네트워크 바이트 순서)
+	ipUint32 := uint32(ipv4[0])<<24 | uint32(ipv4[1])<<16 | uint32(ipv4[2])<<8 | uint32(ipv4[3])
+
+	// 마스크 생성
+	var mask uint32
+	if maskBits == 0 {
+		mask = 0
+	} else {
+		mask = (0xFFFFFFFF << (32 - maskBits)) & 0xFFFFFFFF
+	}
+
+	return ipUint32, mask, nil
 }

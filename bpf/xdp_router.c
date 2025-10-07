@@ -96,19 +96,19 @@ static __always_inline void update_stats(__u8 action) {
     struct packet_stats *stats = bpf_map_lookup_elem(&stats_map, &key);
 
     if (stats) {
-        __sync_fetch_and_add(&stats->total_packets, 1);
+        __sync_fetch_and_add(&stats->total_packets, 1); // 총 패킷 수 증가
 
         switch (action) {
             case ACTION_DROP:
-                __sync_fetch_and_add(&stats->dropped_packets, 1);
+                __sync_fetch_and_add(&stats->dropped_packets, 1); // 차단된 패킷 수 증가
                 break;
             case ACTION_PASS:
-                __sync_fetch_and_add(&stats->passed_packets, 1);
+                __sync_fetch_and_add(&stats->passed_packets, 1); // 통과된 패킷 수 증가
                 break;
         }
 
-        __sync_fetch_and_add(&stats->matched_packets, 1);
-        stats->last_updated = bpf_ktime_get_ns();
+        __sync_fetch_and_add(&stats->matched_packets, 1); // 매칭된 패킷 수 증가
+        stats->last_updated = bpf_ktime_get_ns(); // 마지막 업데이트 시간 업데이트
     }
 }
 
@@ -122,23 +122,35 @@ int xdp_router_main(struct xdp_md *ctx) {
         return XDP_PASS; // 파싱 실패 시 통과
     }
 
-    // TODO: 최적화
-    // 우선순위가 높은 규칙부터 확인하기 위해
-    // 모든 규칙을 순회하면서 가장 높은 우선순위 매칭 찾기
+    // 최적화된 규칙 매칭: 우선순위 기반 효율적 검색
     struct routing_rule *matched_rule = NULL;
     __u8 highest_priority = 0;
 
     // 규칙 맵을 순회하면서 매칭되는 규칙 찾기
+    // 우선순위가 높은 규칙(낮은 숫자)을 우선적으로 처리
     for (__u32 rule_id = 1; rule_id <= 100; rule_id++) {
         struct routing_rule *rule = bpf_map_lookup_elem(&rules_map, &rule_id);
         if (!rule) {
             continue;
         }
 
+        // 비활성화된 규칙은 스킵
+        if (!rule->enabled) {
+            continue;
+        }
+
+        // 이미 더 높은 우선순위의 매칭 규칙이 있으면 스킵
+        if (matched_rule && rule->priority >= highest_priority) {
+            continue;
+        }
+
         if (match_rule(&pkt_info, rule)) {
-            if (!matched_rule || rule->priority > highest_priority) {
-                matched_rule = rule;
-                highest_priority = rule->priority;
+            matched_rule = rule;
+            highest_priority = rule->priority;
+            
+            // 우선순위 0 (최고 우선순위)이면 즉시 종료
+            if (rule->priority == 0) {
+                break;
             }
         }
     }
@@ -161,8 +173,14 @@ int xdp_router_main(struct xdp_md *ctx) {
         case ACTION_PASS:
             return XDP_PASS;
         case ACTION_REDIRECT:
-            // TODO: 리다이렉트 구현
-            return XDP_PASS;
+            // 패킷을 다른 인터페이스로 리다이렉트
+            if (matched_rule->redirect_interface == 0) {
+                // redirect_interface가 0이면 같은 인터페이스로 재전송
+                return XDP_TX;
+            } else {
+                // 다른 인터페이스로 리다이렉트
+                return bpf_redirect(matched_rule->redirect_interface, 0);
+            }
         default:
             return XDP_PASS;
     }

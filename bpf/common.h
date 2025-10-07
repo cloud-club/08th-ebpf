@@ -11,7 +11,7 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
 
-// 타입 정의 (asm/types.h 대신)
+// 타입 정의
 #ifndef __u8
 #define __u8  unsigned char
 #endif
@@ -49,6 +49,7 @@ struct routing_rule {
     __u8  action;
     __u8  priority;
     __u8  enabled;
+    __u32 redirect_interface; // 리다이렉트 대상 인터페이스 인덱스
 };
 
 // 통계 구조체
