@@ -32,15 +32,15 @@ routing_rules:
     priority: 20
     enabled: true
 
-  - id: 3
-    name: "특정 IP 차단"
-    src_ip: "10.0.0.100"
-    dst_ip: ""
-    dst_port: 0
-    protocol: ""
-    action: "drop"
-    priority: 5
-    enabled: true
+  # - id: 3
+  #   name: "특정 IP 차단"
+  #   src_ip: "10.0.0.100"
+  #   dst_ip: ""
+  #   dst_port: 0
+  #   protocol: ""
+  #   action: "drop"
+  #   priority: 5
+  #   enabled: true
 
   - id: 4
     name: "HTTPS 리다이렉트"
