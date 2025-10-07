@@ -41,3 +41,14 @@ routing_rules:
     action: "drop"
     priority: 5
     enabled: true
+
+  - id: 4
+    name: "HTTPS 리다이렉트"
+    src_ip: ""
+    dst_ip: ""
+    dst_port: 443
+    protocol: "tcp"
+    action: "redirect"
+    redirect_interface: "eth1"
+    priority: 15
+    enabled: true
