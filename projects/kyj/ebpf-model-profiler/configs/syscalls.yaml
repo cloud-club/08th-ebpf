@@ -1,0 +1,98 @@
+# configs/syscalls.yaml - Syscall definitions and metadata
+
+# System call definitions with descriptions
+syscalls:
+  # File I/O operations
+  openat:
+    category: file_io
+    description: "Open a file relative to directory file descriptor"
+
+  read:
+    category: file_io
+    description: "Read from a file descriptor"
+
+  write:
+    category: file_io
+    description: "Write to a file descriptor"
+
+  close:
+    category: file_io
+    description: "Close a file descriptor"
+
+  fsync:
+    category: file_io
+    description: "Synchronize file data with storage"
+
+  # Network operations
+  sendto:
+    category: network
+    description: "Send data on a socket"
+
+  recvfrom:
+    category: network
+    description: "Receive data from a socket"
+
+  sendmsg:
+    category: network
+    description: "Send a message on a socket"
+
+  recvmsg:
+    category: network
+    description: "Receive a message from a socket"
+
+  accept:
+    category: network
+    description: "Accept a connection on a socket"
+
+  connect:
+    category: network
+    description: "Initiate a connection on a socket"
+
+  # Time-related
+  nanosleep:
+    category: time
+    description: "Sleep with nanosecond precision"
+
+  clock_nanosleep:
+    category: time
+    description: "High-resolution sleep with clock selection"
+
+  # Memory operations
+  mmap:
+    category: memory
+    description: "Map files or devices into memory"
+
+  munmap:
+    category: memory
+    description: "Unmap files or devices from memory"
+
+# Recommended syscall sets for different scenarios
+presets:
+  model_serving:
+    - openat
+    - read
+    - write
+    - sendto
+    - recvfrom
+    - nanosleep
+
+  network_intensive:
+    - sendto
+    - recvfrom
+    - sendmsg
+    - recvmsg
+    - accept
+    - connect
+
+  file_intensive:
+    - openat
+    - read
+    - write
+    - fsync
+    - close
+
+  minimal:
+    - read
+    - write
+    - sendto
+    - recvfrom

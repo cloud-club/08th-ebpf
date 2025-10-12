@@ -1,0 +1,63 @@
+# configs/default.yaml - Default configuration for eBPF profiler
+
+# Profiler settings
+profiler:
+  # Sampling rate (0.0 to 1.0)
+  sampling_rate: 1.0
+
+  # Size of perf buffer in pages (must be power of 2)
+  buffer_size: 256
+
+  # Request timeout in seconds
+  request_timeout: 30.0
+
+# Syscalls to trace
+syscalls:
+  trace:
+    - openat
+    - read
+    - write
+    - sendto
+    - recvfrom
+    - sendmsg
+    - recvmsg
+    - nanosleep
+    - fsync
+
+# Event filtering
+filters:
+  # Minimum duration to record (microseconds)
+  min_duration_us: 100
+
+  # Maximum events to store in memory
+  max_events: 100000
+
+# Output configuration
+output:
+  # Output format: stdout, json, prometheus
+  format: stdout
+
+  # Prometheus exporter port
+  prometheus_port: 9090
+
+  # JSON output directory
+  json_output_dir: ./output
+
+# Analysis settings
+analysis:
+  # Threshold for flagging slow syscalls (microseconds)
+  slow_threshold_us: 1000
+
+  # Threshold for very slow syscalls (microseconds)
+  very_slow_threshold_us: 10000
+
+  # Hotspot detection - time threshold (percentage of total time)
+  hotspot_time_threshold_percent: 10.0
+
+  # Hotspot detection - count threshold
+  hotspot_count_threshold: 5
+
+# Logging
+logging:
+  level: INFO
+  file: null  # Set to file path for logging to file

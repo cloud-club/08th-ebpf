@@ -1,0 +1,25 @@
+# eBPF Model Serving Latency Profiler - Requirements
+# Python dependencies for the profiler
+
+# eBPF framework
+bcc>=0.18.0
+
+# Metrics export
+prometheus-client>=0.12.0
+
+# Configuration
+pyyaml>=6.0
+
+# CLI
+click>=8.0.0
+
+# Output formatting
+colorama>=0.4.4
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=3.0.0
+
+# Data processing
+pandas>=1.3.0
+numpy>=1.21.0

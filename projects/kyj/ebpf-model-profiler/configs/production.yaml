@@ -1,0 +1,41 @@
+# configs/production.yaml - Production configuration for eBPF profiler
+
+# Profiler settings for production use
+profiler:
+  sampling_rate: 1.0
+  buffer_size: 512  # Larger buffer for production
+  request_timeout: 60.0
+
+# Syscalls to trace (focused set for production)
+syscalls:
+  trace:
+    - read
+    - write
+    - sendto
+    - recvfrom
+    - sendmsg
+    - recvmsg
+
+# Event filtering (stricter for production)
+filters:
+  # Only record events > 500us to reduce overhead
+  min_duration_us: 500
+  max_events: 50000
+
+# Output configuration
+output:
+  format: prometheus
+  prometheus_port: 9090
+  json_output_dir: /var/log/ebpf-profiler
+
+# Analysis settings
+analysis:
+  slow_threshold_us: 5000
+  very_slow_threshold_us: 20000
+  hotspot_time_threshold_percent: 15.0
+  hotspot_count_threshold: 10
+
+# Logging
+logging:
+  level: WARNING
+  file: /var/log/ebpf-profiler/profiler.log

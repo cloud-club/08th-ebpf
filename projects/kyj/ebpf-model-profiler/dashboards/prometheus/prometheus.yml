@@ -1,0 +1,12 @@
+# Prometheus configuration for eBPF Model Profiler
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'ebpf-profiler'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          app: 'ebpf-model-profiler'

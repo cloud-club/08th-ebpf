@@ -1,0 +1,3 @@
+# Example Flask application requirements
+
+Flask>=2.3.0
