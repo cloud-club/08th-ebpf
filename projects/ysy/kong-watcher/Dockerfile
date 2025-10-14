@@ -1,0 +1,66 @@
+# Kong Gateway eBPF Monitor Dockerfile
+
+# 빌드 스테이지
+FROM golang:1.23-alpine AS builder
+
+# 빌드 인수 설정
+ARG TARGETOS
+ARG TARGETARCH
+
+# Go 프록시 설정 (TLS 이슈 방지)
+ENV GOPROXY=direct
+ENV GOSUMDB=off
+ENV GOINSECURE=*
+ENV GO111MODULE=on
+
+# 필요한 패키지 설치
+RUN apk add --no-cache \
+    clang \
+    llvm \
+    linux-headers \
+    make \
+    git \
+    ca-certificates \
+    build-base \
+    musl-dev
+
+# Git TLS 검증 비활성화 (필요한 경우)
+RUN git config --global http.sslverify false
+
+# eBPF 헬퍼 라이브러리 설치
+RUN apk add --no-cache libbpf-dev
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# Go 모듈 파일 복사
+COPY go.mod go.sum ./
+
+# 의존성 다운로드 (TLS 검증 우회)
+RUN GOINSECURE=* go mod download
+
+# 소스 코드 복사
+COPY . .
+
+# Cross-build 환경 변수 설정
+ENV GOOS=${TARGETOS:-linux}
+ENV GOARCH=${TARGETARCH}
+ENV CGO_ENABLED=0
+
+# eBPF 코드 생성 및 빌드
+RUN make build
+
+# 실행 스테이지 - distroless 사용
+FROM gcr.io/distroless/static:nonroot
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# 빌드된 바이너리 복사
+COPY --from=builder /app/kong-watcher .
+
+# 비root 사용자로 실행 (distroless 기본 사용자)
+USER 65532:65532
+
+# 실행 명령
+ENTRYPOINT ["/app/kong-watcher"]
