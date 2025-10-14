@@ -41,7 +41,7 @@ clean:
 # Podman 이미지 빌드 (amd64 전용)
 podman-build: ## Build podman image for amd64
 	@echo "🏗️  Building podman image for amd64..."
-	podman build $(PODMAN_BUILD_ARGS) --platform linux/amd64 --build-arg TARGETOS=linux --build-arg TARGETARCH=amd64 --tag ${IMG} -f Podmanfile .
+	podman build $(PODMAN_BUILD_ARGS) --platform linux/amd64 --build-arg TARGETOS=linux --build-arg TARGETARCH=amd64 --tag ${IMG} -f Dockerfile .
 	@echo "✅ Podman build completed successfully"
 
 # Podman 이미지 푸시

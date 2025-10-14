@@ -38,7 +38,7 @@ Kong Gateway의 트래픽을 eBPF를 사용하여 실시간으로 모니터링�
 - Go 1.21+
 - clang, llvm (eBPF 컴파일용)
 - bpftool (디버깅용, 선택사항)
-- Podman (컨테이너화용)
+- Docker (컨테이너화용)
 
 ## 설치 및 실행
 
@@ -71,14 +71,14 @@ sudo ./kong-watcher [interface_name]
 make run
 ```
 
-### 3. Podman 멀티플랫폼 빌드
+### 3. Docker 빌드 및 배포
 
 ```bash
-# Podman 멀티플랫폼 빌드 및 푸시 (원스톱)
-make podman-buildx
+# Docker 빌드 및 푸시 (원스톱)
+./build-kubernetes.sh --push
 
 # 사용자 정의 이미지로 빌드
-IMG=my-registry.com/kong-watcher:v1.0.0 make podman-buildx
+IMAGE_NAME=my-registry.com/kong-watcher IMAGE_TAG=v1.0.0 ./build-kubernetes.sh --push
 ```
 
 ## 사용법
@@ -165,7 +165,7 @@ kong-watcher/
 │   └── vmlinux.h
 ├── main.go             # Go 메인 애플리케이션
 ├── Makefile            # 빌드 스크립트
-├── Podmanfile          # Podman 이미지 (멀티플랫폼 최적화)
+├── Dockerfile          # Docker 이미지 (Kubernetes 최적화)
 ├── go.mod              # Go 모듈
 ├── go.sum              # Go 의존성
 └── README.md           # 문서
