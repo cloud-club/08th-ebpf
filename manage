@@ -17,6 +17,7 @@ help() {
 
 vm_name=${config_vm_name}
 cmd=${1:-help}
+shift || true
 case $cmd in
 
   launch)
@@ -27,7 +28,11 @@ case $cmd in
 
   shell)
     log "VM 셸 접속 [name=${vm_name}]"
-    orbctl shell -m ${vm_name} /bin/bash
+    if [ $# -gt 0 ]; then
+      orbctl shell -m ${vm_name} /bin/bash -c "$*"
+    else
+      orbctl shell -m ${vm_name} /bin/bash
+    fi
     ;;
 
   destroy)
