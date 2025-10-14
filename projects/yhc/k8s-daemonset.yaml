@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: tcp-monitor
+  namespace: kube-system
+  labels:
+    app: tcp-monitor
+spec:
+  selector:
+    matchLabels:
+      app: tcp-monitor
+  template:
+    metadata:
+      labels:
+        app: tcp-monitor
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: tcp-monitor
+        image: your-registry/tcp-monitor:latest
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+            - SYS_ADMIN
+            - NET_ADMIN
+            - BPF
+        volumeMounts:
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: debugfs
+          mountPath: /sys/kernel/debug
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        ports:
+        - name: metrics
+          containerPort: 9598
+          protocol: TCP
+      volumes:
+      - name: sys
+        hostPath:
+          path: /sys
+          type: Directory
+      - name: debugfs
+        hostPath:
+          path: /sys/kernel/debug
+          type: Directory
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tcp-monitor
+  namespace: kube-system
+  labels:
+    app: tcp-monitor
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: tcp-monitor
+  ports:
+  - name: metrics
+    port: 9598
+    targetPort: 9598
+    protocol: TCP
+---
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: tcp-monitor
+  namespace: kube-system
+  labels:
+    app: tcp-monitor
+spec:
+  selector:
+    matchLabels:
+      app: tcp-monitor
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics

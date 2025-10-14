@@ -13,3 +13,6 @@ clean:
 
 run: build
 	sudo ./monitor
+
+docker-build:
+	docker build -t yhc0818/tcp-monitor:latest --push .
