@@ -35,3 +35,24 @@ go get github.com/cilium/ebpf
 go run main.go
 ```
 
+
+### eBPF Map
+
+```
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, u32);   // PID
+    __type(value, struct cpu_event);  # cpu 사용 시점, 총 사용 시간
+    __uint(max_entries, 10240);  # 최대 엔트리 수
+} cpu_usage SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, u32);   // PID
+    __type(value, struct fault_event);  # User Fault, Kernel Fault
+    __uint(max_entries, 10240);
+} page_faults SEC(".maps");
+```
+
+
+
