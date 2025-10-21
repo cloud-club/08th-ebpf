@@ -4,56 +4,70 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an individual eBPF project within the Cloud Club's 8th eBPF study group. The project implements a Prometheus exporter that collects network-related metrics using eBPF technology for kernel-level monitoring.
+TCP metrics Prometheus exporter using eBPF. Tracks TCP connection state transitions (active/passive connections, failures, resets) via kernel hooks and exposes them as Prometheus metrics on port 9090.
 
 ## Repository Structure
 
 - Located at `/projects/yhc/` within the larger eBPF study repository
 - Main repository root is at `../../` containing study materials and other projects
 - Study materials are organized in `../../study/week{num}/` directories
-- Individual projects are stored in `../../projects/{name}/`
 
 ## Development Commands
 
-### Build and Run
 ```bash
-# Run the Go application
-go run main.go
+# Generate eBPF Go bindings from C code
+make generate
+# Or: go generate ./...
 
-# Build the application
-go build -o yhc main.go
+# Build the application (includes generate step)
+make build
+
+# Run (requires sudo for eBPF operations)
+make run
+# Or: sudo ./monitor eth0
+
+# Clean generated files
+make clean
+
+# Full build pipeline
+make all
 ```
 
-### Dependencies
-- Go 1.24.5
-- cilium/ebpf v0.19.0 (Go library for eBPF)
-- vmlinux.h (kernel headers for eBPF programs)
+## VM Management
 
-### VM Management (from repository root)
+Test in isolated VM environment (from repository root):
 ```bash
-# Launch VM with development environment
-../../manage launch
-
-# Access VM shell
-../../manage shell
-
-# Destroy VM
-../../manage destroy
+../../manage launch    # Launch VM
+../../manage shell     # Access VM
+../../manage destroy   # Destroy VM
+../../manage shell {command}  # Run single command in VM
 ```
 
-## Key Files
+## Architecture
 
-- `vmlinux.h`: Generated kernel headers containing Linux kernel type definitions required for eBPF programs
-- `go.mod`: Go module configuration with cilium/ebpf dependency
-- `main.go`: Entry point for the application (currently a placeholder)
+### Two-Layer Design
+1. **Kernel Space (tcp_monitor.c)**: eBPF program using fentry hook on `tcp_set_state()` to track TCP state transitions. Stores cumulative statistics in a BPF_MAP_TYPE_ARRAY map.
 
-## eBPF Development Context
+2. **User Space (main.go)**: Go application that:
+   - Loads eBPF objects using cilium/ebpf with bpf2go-generated bindings
+   - Attaches fentry tracing program to kernel function
+   - Polls BPF map every 5 seconds via `collectMetrics()`
+   - Exposes Prometheus metrics via HTTP endpoint at `:9090/metrics`
 
-This project implements a Prometheus exporter that collects network metrics using eBPF. Key aspects:
-- Exposing network statistics as Prometheus metrics (typically on port 9090 or similar)
-- Tracking network events like packet counts, bytes transferred, connection states
-- Using eBPF hooks for network stack monitoring (TC, XDP, socket operations)
-- Moving network telemetry data from kernel space to user space
-- Implementing HTTP endpoint for Prometheus to scrape metrics
+### Data Flow
+TCP state change → kernel hook → BPF map update → Go polling → Prometheus gauge update → HTTP /metrics endpoint
 
-The exporter will use Go with cilium/ebpf to load eBPF programs and expose collected metrics in Prometheus format.
+## Key Dependencies
+
+- Go 1.25.1
+- cilium/ebpf v0.19.0 (eBPF loading/management)
+- prometheus/client_golang v1.23.2 (metrics exposition)
+- vmlinux.h (kernel type definitions, pre-generated)
+
+## Tracked Metrics
+
+- `tcp_active_connections_total`: Client-initiated connections (SYN_SENT → ESTABLISHED)
+- `tcp_passive_connections_total`: Server-side connections (SYN_RECV → ESTABLISHED)
+- `tcp_failed_connections_total`: Connection failures (SYN_SENT → CLOSE)
+- `tcp_resets_sent_total`: Reset connections sent
+- `tcp_resets_received_total`: Reset connections received
