@@ -1,234 +1,294 @@
-# Kong Gateway eBPF Monitor
+# Kong Gateway eBPF Monitor - Linux 전용
 
-Kong Gateway의 트래픽을 eBPF를 사용하여 실시간으로 모니터링하는 Go 애플리케이션이다.
+Kong Gateway의 HTTP 트래픽을 실시간으로 모니터링하는 eBPF 기반 사이드카 컨테이너입니다.
 
-## 기능
+## ⚠️ 중요 사항
 
-- **실시간 트래픽 모니터링**: XDP를 사용하여 네트워크 패킷을 인터셉트
-- **HTTP 메서드별 분류**: GET, POST, PUT, DELETE 등 HTTP 메서드별 통계
-- **도메인별 분류**: Host 헤더를 파싱하여 도메인별 통계
-- **경로별 분류**: HTTP 경로별 통계
-- **연결별 상세 추적**: BPF_HASH를 사용한 연결별 상세 통계
-- **컨테이너별 집계**: BPF_ARRAY를 사용한 컨테이너별 집계 통계
-- **실시간 이벤트**: BPF_RINGBUF_OUTPUT을 사용한 실시간 이벤트 스트림
+**이 프로젝트는 Linux 환경에서만 빌드 및 실행할 수 있습니다.** eBPF는 Linux 커널 전용 기술이므로 macOS나 Windows에서는 빌드할 수 없습니다.
 
-## 아키텍처
+## 🏗️ 아키텍처
+
+### eBPF 프로그램 구조
 
 ```
-┌─────────────────────────────────────────┐
-│              Same Pod                   │
-│                                         │
-│  ┌─────────────────┐  ┌───────────────┐ │
-│  │ eBPF Monitor    │  │ Kong Gateway  │ │
-│  │ Container       │  │ Container     │ │
-│  │                 │  │               │ │
-│  │ [eBPF Program] ─┼──┼→ [HTTP API]   │ │
-│  │                 │  │               │ │
-│  └─────────────────┘  └───────────────┘ │
-│                                         │
-└─────────────────────────────────────────┘
-           ↑
-    External Traffic
-    (from other pods/services)
+bpf/kong_uprobe_sidecar.c
+├── HTTP 요청/응답 모니터링
+├── Kong Gateway 프로세스 추적
+├── 실시간 이벤트 스트리밍
+└── 성능 메트릭 수집
 ```
 
-## 요구사항
+### BPF Maps
 
-- Linux 커널 4.18+ (eBPF XDP 지원)
-- Go 1.21+
-- clang, llvm (eBPF 컴파일용)
-- bpftool (디버깅용, 선택사항)
-- Docker (컨테이너화용)
+- **`kong_processes`**: Kong 프로세스 추적 (HASH)
+- **`request_start_times`**: 요청 시작 시간 추적 (HASH)
+- **`http_requests`**: HTTP 요청 데이터 (HASH)
+- **`events`**: 실시간 이벤트 스트림 (RINGBUF)
 
-## 설치 및 실행
+### Uprobe 핸들러
 
-### 1. 개발 환경 설정
+- **`uprobe_kong_http_request`**: Kong HTTP 요청 처리
+- **`uprobe_kong_http_response`**: Kong HTTP 응답 처리
+- **`uprobe_read`**: 시스템 read 호출 모니터링
+- **`uprobe_write`**: 시스템 write 호출 모니터링
+- **`uprobe_kong_lua_handler`**: Kong Lua 핸들러 모니터링
+
+## 🚀 빌드 및 배포
+
+### Docker 이미지 빌드
 
 ```bash
-# 의존성 설치
-make deps
+# 멀티 아키텍처 빌드 및 푸시 (기본)
+make buildx
 
-# 개발 환경 설정 (Ubuntu/Debian)
-sudo apt-get install clang llvm bpftool
-
-# 개발 환경 설정 (CentOS/RHEL)
-sudo yum install clang llvm bpftool
-
-# 개발 환경 설정 (macOS)
-brew install llvm
-```
-
-### 2. 빌드 및 실행
-
-```bash
-# eBPF 코드 생성 및 빌드
+# 로컬 빌드만
 make build
 
-# 로컬에서 실행 (sudo 권한 필요)
-sudo ./kong-watcher [interface_name]
+# 이미지 푸시만
+make push
 
-# 또는 Makefile 사용
-make run
+# 도움말
+make help
 ```
 
-### 3. Docker 빌드 및 배포
+### 변수 설정
 
 ```bash
-# Docker 빌드 및 푸시 (원스톱)
-./build-kubernetes.sh --push
+# 이미지 이름 변경
+make buildx IMG=my-registry.com/kong-watcher:v1.0.0
 
-# 사용자 정의 이미지로 빌드
-IMAGE_NAME=my-registry.com/kong-watcher IMAGE_TAG=v1.0.0 ./build-kubernetes.sh --push
+# 버전 변경
+make buildx VERSION=2.0.0
+
+# 커밋 SHA 변경
+make buildx COMMIT_SHA=abc123
 ```
 
-## 사용법
+## 🐳 Kubernetes 사이드카 배포
 
-### 기본 실행
+### 1. 사이드카 설정
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong-gateway-with-monitor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kong-gateway-with-monitor
+  template:
+    metadata:
+      labels:
+        app: kong-gateway-with-monitor
+    spec:
+      containers:
+      - name: kong-gateway
+        image: kong:3.4
+        # Kong Gateway 설정...
+        
+      - name: kong-ebpf-monitor
+        image: kong-watcher:latest
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+            - SYS_ADMIN
+            - SYS_RESOURCE
+            - NET_ADMIN
+        volumeMounts:
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+        - name: dev
+          mountPath: /host/dev
+          readOnly: true
+        env:
+        - name: LOG_LEVEL
+          value: "info"
+        - name: ENABLE_JSON_LOG
+          value: "true"
+        - name: KONG_PROCESS_NAME
+          value: "kong"
+        - name: STATS_INTERVAL
+          value: "30s"
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: dev
+        hostPath:
+          path: /dev
+```
+
+### 2. 배포 명령어
 
 ```bash
-# 기본 인터페이스 (eth0) 사용
+# Kubernetes 배포
+kubectl apply -f kong-sidecar.yaml
+
+# 상태 확인
+kubectl get pods -l app=kong-gateway-with-monitor
+
+# 로그 확인
+kubectl logs -l app=kong-gateway-with-monitor -c kong-ebpf-monitor
+```
+
+## 🔧 로컬 테스트
+
+### 1. Kong Gateway 실행
+
+```bash
+# Kong Gateway 설치 및 실행
+docker run -d --name kong \
+    -e "KONG_DATABASE=off" \
+    -e "KONG_PROXY_ACCESS_LOG=/dev/stdout" \
+    -e "KONG_ADMIN_ACCESS_LOG=/dev/stdout" \
+    -e "KONG_PROXY_ERROR_LOG=/dev/stderr" \
+    -e "KONG_ADMIN_ERROR_LOG=/dev/stderr" \
+    -e "KONG_ADMIN_LISTEN=0.0.0.0:8001" \
+    -p 8000:8000 \
+    -p 8001:8001 \
+    kong:3.4
+```
+
+### 2. eBPF 모니터 실행
+
+```bash
+# 빌드 후 실행
+make build
+sudo ./kong-watcher
+```
+
+### 3. 테스트 요청
+
+```bash
+# Kong Gateway에 테스트 요청
+curl -X GET http://localhost:8000/
+curl -X POST http://localhost:8000/test \
+    -H "Content-Type: application/json" \
+    -d '{"test": "data"}'
+```
+
+## 📊 모니터링 데이터
+
+### 수집되는 메트릭
+
+- **HTTP 요청 수**: 총 요청 수
+- **HTTP 응답 수**: 총 응답 수
+- **평균 응답 시간**: 요청-응답 간격
+- **에러 수**: 4xx, 5xx 응답 수
+- **처리 중인 요청**: 현재 처리 중인 요청 수
+
+### 로그 출력 예시
+
+```json
+{
+  "level": "info",
+  "msg": "HTTP Request",
+  "method": "GET",
+  "host": "localhost:8000",
+  "path": "/",
+  "status_code": 200,
+  "response_time_ns": 1500000,
+  "error_code": 0,
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+## 🛠️ 개발 환경 설정
+
+### 로컬 개발
+
+```bash
+# Go 모듈 정리
+go mod tidy
+
+# eBPF 코드 생성
+GOOS=linux GOARCH=amd64 go generate ./...
+
+# 로컬 빌드
+go build -o kong-watcher *.go
+
+# 실행 (sudo 권한 필요)
+sudo ./kong-watcher
+```
+
+### eBPF 디버깅
+
+```bash
+# bpftool 설치
+sudo apt-get install bpftool  # Ubuntu/Debian
+sudo yum install bpftool      # CentOS/RHEL
+sudo apk add bpftool          # Alpine
+
+# eBPF 프로그램 확인
+sudo bpftool prog list
+sudo bpftool map list
+```
+
+## 🔍 문제 해결
+
+### 빌드 오류
+```bash
+# Linux 환경 확인
+uname -s  # Linux여야 함
+
+# 커널 버전 확인
+uname -r  # 4.18+ 여야 함
+```
+
+### 실행 오류
+```bash
+# 권한 확인
 sudo ./kong-watcher
 
-# 특정 인터페이스 지정
-sudo ./kong-watcher eth1
+# Kong 프로세스 확인
+ps aux | grep kong
 ```
 
-### 출력 예시
-
-```
-2024/01/15 10:30:00 Kong Gateway eBPF Monitor 시작
-2024/01/15 10:30:00 XDP 프로그램이 인터페이스 eth0 (인덱스 2)에 연결됨
-2024/01/15 10:30:00 Ctrl-C를 눌러 종료
-
-=== Kong Gateway 트래픽 통계 ===
-컨테이너 통계:
-  총 요청 수: 150
-  총 응답 수: 148
-  총 송신 바이트: 45600
-  총 수신 바이트: 23400
-  총 에러 수: 2
-  마지막 활동: 2024-01-15T10:30:00Z
-
-연결 1:
-  192.168.1.100:54321 -> 10.0.0.5:8000
-  메서드: GET, 도메인: api.example.com, 경로: /users
-  요청 수: 25, 응답 수: 24
-  송신: 1200 bytes, 수신: 800 bytes
-  에러 수: 1
-  마지막 활동: 2024-01-15T10:30:00Z
-===============================
-
-[10:30:05] REQUEST 192.168.1.100:54321 -> 10.0.0.5:8000 | GET api.example.com/users | 1200 bytes | 상태: 0
-[10:30:05] RESPONSE 10.0.0.5:8000 -> 192.168.1.100:54321 | GET api.example.com/users | 800 bytes | 상태: 200
-```
-
-## eBPF 맵 구조
-
-### BPF_HASH - 연결별 상세 추적 (`conn_map`)
-- **키**: `conn_key` 구조체
-  - 소스 IP (4바이트)
-  - 목적지 IP (4바이트)  
-  - 소스 포트 (2바이트)
-  - 목적지 포트 (2바이트)
-  - 프로토콜 (1바이트)
-  - HTTP 메서드 (1바이트)
-  - 패딩 (2바이트, Go 구조체 호환성)
-  - 도메인명 (64바이트 고정)
-  - 경로 (128바이트 고정)
-- **값**: `conn_stats` 구조체
-  - 요청 수, 응답 수, 송신 바이트, 수신 바이트, 에러 수, 마지막 활동 시간
-- **최대 엔트리**: 10,000개
-
-### BPF_ARRAY - 컨테이너별 집계 (`container_stats_map`)
-- **키**: 컨테이너 ID (4바이트 인덱스)
-- **값**: `container_stats` 구조체
-  - 총 요청 수, 응답 수, 송신 바이트, 수신 바이트, 에러 수, 마지막 활동 시간
-- **최대 엔트리**: 1,000개
-
-### BPF_RINGBUF_OUTPUT - 실시간 이벤트 (`traffic_events`)
-- **버퍼 크기**: 256KB
-- **이벤트 구조**: `traffic_event` 구조체
-  - 이벤트 타입 (4바이트): 요청(1), 응답(2), 에러(3)
-  - 소스/목적지 IP 및 포트
-  - HTTP 메서드, 도메인(64바이트), 경로(128바이트)
-  - 타임스탬프, 바이트 수, HTTP 상태 코드
-
-## 개발
-
-### 프로젝트 구조
-
-```
-kong-watcher/
-├── bpf/                 # eBPF C 코드
-│   └── kong_monitor.c
-├── headers/             # 헤더 파일
-│   └── vmlinux.h
-├── main.go             # Go 메인 애플리케이션
-├── Makefile            # 빌드 스크립트
-├── Dockerfile          # Docker 이미지 (Kubernetes 최적화)
-├── go.mod              # Go 모듈
-├── go.sum              # Go 의존성
-└── README.md           # 문서
-```
-
-### eBPF 코드 수정
-
-1. `bpf/kong_monitor.c` 파일 수정
-2. `go generate` 실행하여 Go 코드 재생성
-3. `make build` 실행하여 재빌드
-
-### 테스트
-
+### 사이드카 오류
 ```bash
-# 단위 테스트
-make test
+# Pod 로그 확인
+kubectl logs <pod-name> -c kong-ebpf-monitor
 
-# eBPF 프로그램 테스트 (sudo 권한 필요)
-sudo go test -exec sudo ./...
+# Pod 상태 확인
+kubectl describe pod <pod-name>
 ```
 
-## 문제 해결
-
-### 권한 오류
-```bash
-# eBPF 프로그램 로드에 필요한 권한
-sudo ./kong-watcher
-```
-
-### 인터페이스 찾을 수 없음
-```bash
-# 사용 가능한 네트워크 인터페이스 확인
-ip link show
-
-# 특정 인터페이스 지정
-sudo ./kong-watcher eth1
-```
-
-### eBPF 컴파일 오류
-```bash
-# clang, llvm 설치 확인
-clang --version
-llvm-config --version
-
-# 헤더 파일 확인
-ls -la /usr/include/linux/bpf.h
-```
-
-## 라이선스
-
-Dual MIT/GPL
-
-## 기여
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## 참고 자료
+## 📚 추가 자료
 
 - [eBPF 공식 문서](https://ebpf.io/)
-- [Cilium eBPF Go 라이브러리](https://github.com/cilium/ebpf)
+- [Cilium eBPF 라이브러리](https://github.com/cilium/ebpf)
 - [Kong Gateway 문서](https://docs.konghq.com/)
-- [XDP (eXpress Data Path) 문서](https://www.iovisor.org/technology/xdp)
+- [Kubernetes 사이드카 패턴](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/)
+
+## 🤝 기여하기
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 라이선스
+
+이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
+
+---
+
+**⚠️ 주의**: 이 프로젝트는 Linux 환경에서만 빌드 및 실행할 수 있습니다. macOS나 Windows에서는 빌드할 수 없습니다.
