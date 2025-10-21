@@ -19,6 +19,20 @@ class LatencyTracer:
     and manages the lifecycle of the tracing session.
     """
 
+    # Syscall to kernel function name mapping
+    # Try multiple variants as kernel versions may differ
+    SYSCALL_KERNEL_FUNCS = {
+        'openat': ['__x64_sys_openat', 'sys_openat', '__se_sys_openat'],
+        'read': ['__x64_sys_read', 'sys_read', '__se_sys_read'],
+        'write': ['__x64_sys_write', 'sys_write', '__se_sys_write'],
+        'sendto': ['__x64_sys_sendto', 'sys_sendto', '__se_sys_sendto'],
+        'recvfrom': ['__x64_sys_recvfrom', 'sys_recvfrom', '__se_sys_recvfrom'],
+        'sendmsg': ['__x64_sys_sendmsg', 'sys_sendmsg', '__se_sys_sendmsg'],
+        'recvmsg': ['__x64_sys_recvmsg', 'sys_recvmsg', '__se_sys_recvmsg'],
+        'nanosleep': ['__x64_sys_nanosleep', 'sys_nanosleep', '__se_sys_nanosleep'],
+        'fsync': ['__x64_sys_fsync', 'sys_fsync', '__se_sys_fsync'],
+    }
+
     def __init__(self, config: Dict):
         """
         Initialize the LatencyTracer.
@@ -32,12 +46,15 @@ class LatencyTracer:
         """
         self.config = config
         self.pid = config.get('pid')
-        self.syscalls = config.get('syscalls', [])
+        # Default syscalls if not specified
+        default_syscalls = ['openat', 'read', 'write', 'sendto', 'recvfrom', 'nanosleep']
+        self.syscalls = config.get('syscalls', default_syscalls)
         self.buffer_size = config.get('buffer_size', 256)
 
         self.bpf = None
         self.event_handlers = {}
         self.running = False
+        self.attached_probes = []  # Track successfully attached probes
 
         self.logger = logging.getLogger(__name__)
 
@@ -92,24 +109,57 @@ class LatencyTracer:
     def _attach_syscalls(self):
         """
         Attach kprobes/kretprobes to specified syscalls.
+        Tries multiple kernel function name variants for compatibility.
         """
+        attached_count = 0
+
         for syscall in self.syscalls:
-            try:
-                # Attach entry probe
-                self.bpf.attach_kprobe(
-                    event=f"__{syscall}",
-                    fn_name=f"trace_{syscall}_enter"
+            if syscall not in self.SYSCALL_KERNEL_FUNCS:
+                self.logger.warning(f"Unknown syscall: {syscall}, skipping")
+                continue
+
+            kernel_funcs = self.SYSCALL_KERNEL_FUNCS[syscall]
+            attached = False
+
+            # Try each possible kernel function name
+            for kernel_func in kernel_funcs:
+                try:
+                    # Attach entry probe
+                    self.bpf.attach_kprobe(
+                        event=kernel_func,
+                        fn_name=f"trace_{syscall}_enter"
+                    )
+
+                    # Attach exit probe
+                    self.bpf.attach_kretprobe(
+                        event=kernel_func,
+                        fn_name=f"trace_{syscall}_exit"
+                    )
+
+                    self.attached_probes.append({
+                        'syscall': syscall,
+                        'kernel_func': kernel_func
+                    })
+
+                    self.logger.info(f"✓ Attached probes to {syscall} (via {kernel_func})")
+                    attached = True
+                    attached_count += 1
+                    break  # Success, no need to try other variants
+
+                except Exception as e:
+                    # Try next variant
+                    continue
+
+            if not attached:
+                self.logger.error(
+                    f"✗ Failed to attach to {syscall}. "
+                    f"Tried: {', '.join(kernel_funcs)}"
                 )
 
-                # Attach exit probe
-                self.bpf.attach_kretprobe(
-                    event=f"__{syscall}",
-                    fn_name=f"trace_{syscall}_exit"
-                )
+        if attached_count == 0:
+            raise RuntimeError("Failed to attach to any syscalls!")
 
-                self.logger.info(f"Attached probes to {syscall}")
-            except Exception as e:
-                self.logger.warning(f"Failed to attach to {syscall}: {e}")
+        self.logger.info(f"Successfully attached to {attached_count}/{len(self.syscalls)} syscalls")
 
     def register_event_handler(self, event_type: str, handler: Callable):
         """
@@ -171,13 +221,15 @@ class LatencyTracer:
         self.running = False
 
         if self.bpf:
-            # Detach all probes
-            for syscall in self.syscalls:
+            # Detach all successfully attached probes
+            for probe in self.attached_probes:
                 try:
-                    self.bpf.detach_kprobe(event=f"__{syscall}")
-                    self.bpf.detach_kretprobe(event=f"__{syscall}")
-                except:
-                    pass
+                    kernel_func = probe['kernel_func']
+                    self.bpf.detach_kprobe(event=kernel_func)
+                    self.bpf.detach_kretprobe(event=kernel_func)
+                    self.logger.debug(f"Detached probes from {probe['syscall']}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to detach {probe['syscall']}: {e}")
 
         self.logger.info("Tracer stopped")
 

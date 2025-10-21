@@ -53,57 +53,6 @@ int trace_syscall_enter(struct pt_regs *ctx) {
 }
 
 /**
- * trace_syscall_exit - Trace syscall exit point
- * @syscall_name: Name of the syscall (passed as parameter)
- *
- * This is called when a traced syscall exits.
- * Calculates duration and sends event to user space.
- */
-int trace_syscall_exit(struct pt_regs *ctx, const char *syscall_name) {
-    u64 pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = pid_tgid >> 32;
-    u32 tid = pid_tgid;
-
-    // Check if we should trace this PID
-    if (!should_trace(pid)) {
-        return 0;
-    }
-
-    // Look up start time
-    u64 *start_ts = start_times.lookup(&pid_tgid);
-    if (start_ts == 0) {
-        return 0; // No entry event found
-    }
-
-    // Calculate duration
-    u64 end_ts = bpf_ktime_get_ns();
-    u64 duration = end_ts - *start_ts;
-
-    // Prepare event structure
-    struct syscall_event event = {};
-    event.pid = pid;
-    event.tid = tid;
-    event.timestamp_ns = end_ts;
-    event.duration_ns = duration;
-    event.event_type = EVENT_TYPE_SYSCALL_EXIT;
-    event.ret_val = PT_REGS_RC(ctx);
-
-    // Get process name
-    bpf_get_current_comm(&event.comm, sizeof(event.comm));
-
-    // Copy syscall name (would be passed as parameter in real implementation)
-    __builtin_memcpy(event.syscall_name, "generic", 8);
-
-    // Send event to user space
-    events.perf_submit(ctx, &event, sizeof(event));
-
-    // Clean up
-    start_times.delete(&pid_tgid);
-
-    return 0;
-}
-
-/**
  * Specific syscall tracers
  * These attach to individual syscalls we're interested in
  */
@@ -114,7 +63,36 @@ int trace_openat_enter(struct pt_regs *ctx) {
 }
 
 int trace_openat_exit(struct pt_regs *ctx) {
-    return trace_syscall_exit(ctx, "openat");
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = pid_tgid >> 32;
+
+    if (!should_trace(pid)) {
+        return 0;
+    }
+
+    u64 *start_ts = start_times.lookup(&pid_tgid);
+    if (start_ts == 0) {
+        return 0;
+    }
+
+    u64 end_ts = bpf_ktime_get_ns();
+    u64 duration = end_ts - *start_ts;
+
+    struct syscall_event event = {};
+    event.pid = pid;
+    event.tid = pid_tgid;
+    event.timestamp_ns = end_ts;
+    event.duration_ns = duration;
+    event.event_type = EVENT_TYPE_SYSCALL_EXIT;
+    event.ret_val = PT_REGS_RC(ctx);
+
+    bpf_get_current_comm(&event.comm, sizeof(event.comm));
+    __builtin_memcpy(event.syscall_name, "openat", 7);
+
+    events.perf_submit(ctx, &event, sizeof(event));
+    start_times.delete(&pid_tgid);
+
+    return 0;
 }
 
 // Trace read syscall
@@ -123,7 +101,36 @@ int trace_read_enter(struct pt_regs *ctx) {
 }
 
 int trace_read_exit(struct pt_regs *ctx) {
-    return trace_syscall_exit(ctx, "read");
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = pid_tgid >> 32;
+
+    if (!should_trace(pid)) {
+        return 0;
+    }
+
+    u64 *start_ts = start_times.lookup(&pid_tgid);
+    if (start_ts == 0) {
+        return 0;
+    }
+
+    u64 end_ts = bpf_ktime_get_ns();
+    u64 duration = end_ts - *start_ts;
+
+    struct syscall_event event = {};
+    event.pid = pid;
+    event.tid = pid_tgid;
+    event.timestamp_ns = end_ts;
+    event.duration_ns = duration;
+    event.event_type = EVENT_TYPE_SYSCALL_EXIT;
+    event.ret_val = PT_REGS_RC(ctx);
+
+    bpf_get_current_comm(&event.comm, sizeof(event.comm));
+    __builtin_memcpy(event.syscall_name, "read", 5);
+
+    events.perf_submit(ctx, &event, sizeof(event));
+    start_times.delete(&pid_tgid);
+
+    return 0;
 }
 
 // Trace write syscall
@@ -132,7 +139,36 @@ int trace_write_enter(struct pt_regs *ctx) {
 }
 
 int trace_write_exit(struct pt_regs *ctx) {
-    return trace_syscall_exit(ctx, "write");
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = pid_tgid >> 32;
+
+    if (!should_trace(pid)) {
+        return 0;
+    }
+
+    u64 *start_ts = start_times.lookup(&pid_tgid);
+    if (start_ts == 0) {
+        return 0;
+    }
+
+    u64 end_ts = bpf_ktime_get_ns();
+    u64 duration = end_ts - *start_ts;
+
+    struct syscall_event event = {};
+    event.pid = pid;
+    event.tid = pid_tgid;
+    event.timestamp_ns = end_ts;
+    event.duration_ns = duration;
+    event.event_type = EVENT_TYPE_SYSCALL_EXIT;
+    event.ret_val = PT_REGS_RC(ctx);
+
+    bpf_get_current_comm(&event.comm, sizeof(event.comm));
+    __builtin_memcpy(event.syscall_name, "write", 6);
+
+    events.perf_submit(ctx, &event, sizeof(event));
+    start_times.delete(&pid_tgid);
+
+    return 0;
 }
 
 // Trace nanosleep (for inference time simulation)
@@ -141,5 +177,224 @@ int trace_nanosleep_enter(struct pt_regs *ctx) {
 }
 
 int trace_nanosleep_exit(struct pt_regs *ctx) {
-    return trace_syscall_exit(ctx, "nanosleep");
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = pid_tgid >> 32;
+
+    if (!should_trace(pid)) {
+        return 0;
+    }
+
+    u64 *start_ts = start_times.lookup(&pid_tgid);
+    if (start_ts == 0) {
+        return 0;
+    }
+
+    u64 end_ts = bpf_ktime_get_ns();
+    u64 duration = end_ts - *start_ts;
+
+    struct syscall_event event = {};
+    event.pid = pid;
+    event.tid = pid_tgid;
+    event.timestamp_ns = end_ts;
+    event.duration_ns = duration;
+    event.event_type = EVENT_TYPE_SYSCALL_EXIT;
+    event.ret_val = PT_REGS_RC(ctx);
+
+    bpf_get_current_comm(&event.comm, sizeof(event.comm));
+    __builtin_memcpy(event.syscall_name, "nanosleep", 10);
+
+    events.perf_submit(ctx, &event, sizeof(event));
+    start_times.delete(&pid_tgid);
+
+    return 0;
+}
+
+// Trace sendto syscall
+int trace_sendto_enter(struct pt_regs *ctx) {
+    return trace_syscall_enter(ctx);
+}
+
+int trace_sendto_exit(struct pt_regs *ctx) {
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = pid_tgid >> 32;
+
+    if (!should_trace(pid)) {
+        return 0;
+    }
+
+    u64 *start_ts = start_times.lookup(&pid_tgid);
+    if (start_ts == 0) {
+        return 0;
+    }
+
+    u64 end_ts = bpf_ktime_get_ns();
+    u64 duration = end_ts - *start_ts;
+
+    struct syscall_event event = {};
+    event.pid = pid;
+    event.tid = pid_tgid;
+    event.timestamp_ns = end_ts;
+    event.duration_ns = duration;
+    event.event_type = EVENT_TYPE_SYSCALL_EXIT;
+    event.ret_val = PT_REGS_RC(ctx);
+
+    bpf_get_current_comm(&event.comm, sizeof(event.comm));
+    __builtin_memcpy(event.syscall_name, "sendto", 7);
+
+    events.perf_submit(ctx, &event, sizeof(event));
+    start_times.delete(&pid_tgid);
+
+    return 0;
+}
+
+// Trace recvfrom syscall
+int trace_recvfrom_enter(struct pt_regs *ctx) {
+    return trace_syscall_enter(ctx);
+}
+
+int trace_recvfrom_exit(struct pt_regs *ctx) {
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = pid_tgid >> 32;
+
+    if (!should_trace(pid)) {
+        return 0;
+    }
+
+    u64 *start_ts = start_times.lookup(&pid_tgid);
+    if (start_ts == 0) {
+        return 0;
+    }
+
+    u64 end_ts = bpf_ktime_get_ns();
+    u64 duration = end_ts - *start_ts;
+
+    struct syscall_event event = {};
+    event.pid = pid;
+    event.tid = pid_tgid;
+    event.timestamp_ns = end_ts;
+    event.duration_ns = duration;
+    event.event_type = EVENT_TYPE_SYSCALL_EXIT;
+    event.ret_val = PT_REGS_RC(ctx);
+
+    bpf_get_current_comm(&event.comm, sizeof(event.comm));
+    __builtin_memcpy(event.syscall_name, "recvfrom", 9);
+
+    events.perf_submit(ctx, &event, sizeof(event));
+    start_times.delete(&pid_tgid);
+
+    return 0;
+}
+
+// Trace sendmsg syscall
+int trace_sendmsg_enter(struct pt_regs *ctx) {
+    return trace_syscall_enter(ctx);
+}
+
+int trace_sendmsg_exit(struct pt_regs *ctx) {
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = pid_tgid >> 32;
+
+    if (!should_trace(pid)) {
+        return 0;
+    }
+
+    u64 *start_ts = start_times.lookup(&pid_tgid);
+    if (start_ts == 0) {
+        return 0;
+    }
+
+    u64 end_ts = bpf_ktime_get_ns();
+    u64 duration = end_ts - *start_ts;
+
+    struct syscall_event event = {};
+    event.pid = pid;
+    event.tid = pid_tgid;
+    event.timestamp_ns = end_ts;
+    event.duration_ns = duration;
+    event.event_type = EVENT_TYPE_SYSCALL_EXIT;
+    event.ret_val = PT_REGS_RC(ctx);
+
+    bpf_get_current_comm(&event.comm, sizeof(event.comm));
+    __builtin_memcpy(event.syscall_name, "sendmsg", 8);
+
+    events.perf_submit(ctx, &event, sizeof(event));
+    start_times.delete(&pid_tgid);
+
+    return 0;
+}
+
+// Trace recvmsg syscall
+int trace_recvmsg_enter(struct pt_regs *ctx) {
+    return trace_syscall_enter(ctx);
+}
+
+int trace_recvmsg_exit(struct pt_regs *ctx) {
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = pid_tgid >> 32;
+
+    if (!should_trace(pid)) {
+        return 0;
+    }
+
+    u64 *start_ts = start_times.lookup(&pid_tgid);
+    if (start_ts == 0) {
+        return 0;
+    }
+
+    u64 end_ts = bpf_ktime_get_ns();
+    u64 duration = end_ts - *start_ts;
+
+    struct syscall_event event = {};
+    event.pid = pid;
+    event.tid = pid_tgid;
+    event.timestamp_ns = end_ts;
+    event.duration_ns = duration;
+    event.event_type = EVENT_TYPE_SYSCALL_EXIT;
+    event.ret_val = PT_REGS_RC(ctx);
+
+    bpf_get_current_comm(&event.comm, sizeof(event.comm));
+    __builtin_memcpy(event.syscall_name, "recvmsg", 8);
+
+    events.perf_submit(ctx, &event, sizeof(event));
+    start_times.delete(&pid_tgid);
+
+    return 0;
+}
+
+// Trace fsync syscall
+int trace_fsync_enter(struct pt_regs *ctx) {
+    return trace_syscall_enter(ctx);
+}
+
+int trace_fsync_exit(struct pt_regs *ctx) {
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = pid_tgid >> 32;
+
+    if (!should_trace(pid)) {
+        return 0;
+    }
+
+    u64 *start_ts = start_times.lookup(&pid_tgid);
+    if (start_ts == 0) {
+        return 0;
+    }
+
+    u64 end_ts = bpf_ktime_get_ns();
+    u64 duration = end_ts - *start_ts;
+
+    struct syscall_event event = {};
+    event.pid = pid;
+    event.tid = pid_tgid;
+    event.timestamp_ns = end_ts;
+    event.duration_ns = duration;
+    event.event_type = EVENT_TYPE_SYSCALL_EXIT;
+    event.ret_val = PT_REGS_RC(ctx);
+
+    bpf_get_current_comm(&event.comm, sizeof(event.comm));
+    __builtin_memcpy(event.syscall_name, "fsync", 6);
+
+    events.perf_submit(ctx, &event, sizeof(event));
+    start_times.delete(&pid_tgid);
+
+    return 0;
 }
