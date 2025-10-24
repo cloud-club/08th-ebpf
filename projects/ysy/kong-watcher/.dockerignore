@@ -1,0 +1,72 @@
+# .dockerignore for Kong eBPF Monitor
+
+# Git 관련 파일
+.git
+.gitignore
+.gitattributes
+
+# 문서 파일
+*.md
+README.md
+CHANGELOG.md
+LICENSE
+
+# IDE 설정 파일
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS 생성 파일
+.DS_Store
+Thumbs.db
+
+# 빌드 아티팩트
+kong-watcher
+*.o
+*.so
+*.a
+bpf_*.go
+kprobe_*.go
+uprobe_*.go
+
+# 테스트 파일
+*_test.go
+test/
+tests/
+
+# 로그 파일
+*.log
+logs/
+
+# 임시 파일
+tmp/
+temp/
+*.tmp
+
+# 개발 도구 설정
+Makefile
+.dockerignore
+
+# Kubernetes 매니페스트 (빌드에 불필요)
+*.yaml
+*.yml
+!go.mod
+!go.sum
+
+# 개발 환경 설정
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# 패키지 매니저
+node_modules/
+vendor/
+
+# 백업 파일
+*.bak
+*.backup
+*.orig
