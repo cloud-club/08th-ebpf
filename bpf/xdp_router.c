@@ -125,12 +125,10 @@ int xdp_router_main(struct xdp_md *ctx) {
         return XDP_PASS; // 파싱 실패 시 통과
     }
 
-    // 최적화된 규칙 매칭: 우선순위 기반 효율적 검색
     struct routing_rule *matched_rule = NULL;
     __u8 highest_priority = 0;
 
     // 규칙 맵을 순회하면서 매칭되는 규칙 찾기
-    // 우선순위가 높은 규칙(낮은 숫자)을 우선적으로 처리
     for (__u32 rule_id = 1; rule_id <= 100; rule_id++) {
         struct routing_rule *rule = bpf_map_lookup_elem(&rules_map, &rule_id);
         if (!rule) {
@@ -151,7 +149,7 @@ int xdp_router_main(struct xdp_md *ctx) {
             matched_rule = rule;
             highest_priority = rule->priority;
             
-            // 우선순위 0 (최고 우선순위)이면 즉시 종료
+            // 우선순위 0이면 즉시 종료
             if (rule->priority == 0) {
                 break;
             }
@@ -165,7 +163,6 @@ int xdp_router_main(struct xdp_md *ctx) {
         action = matched_rule->action;
         update_stats(action);
 
-        // 디버그 정보
         bpf_printk("Rule %d matched action=%d\n", matched_rule->id, action);
     }
 
@@ -178,10 +175,8 @@ int xdp_router_main(struct xdp_md *ctx) {
         case ACTION_REDIRECT:
             // 패킷을 다른 인터페이스로 리다이렉트
             if (matched_rule->redirect_interface == 0) {
-                // redirect_interface가 0이면 같은 인터페이스로 재전송
                 return XDP_TX;
             } else {
-                // 다른 인터페이스로 리다이렉트
                 return bpf_redirect(matched_rule->redirect_interface, 0);
             }
         default:

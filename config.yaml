@@ -15,6 +15,7 @@ routing_rules:
   - id: 1
     name: "SSH 차단"
     src_ip: ""
+    src_port: 0
     dst_ip: ""
     dst_port: 22
     protocol: "tcp"
@@ -25,6 +26,7 @@ routing_rules:
   - id: 2
     name: "HTTP 허용"
     src_ip: ""
+    src_port: 0
     dst_ip: ""
     dst_port: 80
     protocol: "tcp"
@@ -35,6 +37,7 @@ routing_rules:
   - id: 3
     name: "특정 IP 차단"
     src_ip: "10.0.0.100"
+    src_port: 0
     dst_ip: ""
     dst_port: 0
     protocol: ""
@@ -45,10 +48,22 @@ routing_rules:
   - id: 4
     name: "HTTPS 리다이렉트"
     src_ip: ""
+    src_port: 0
     dst_ip: ""
     dst_port: 443
     protocol: "tcp"
     action: "redirect"
     redirect_interface: "lo"
     priority: 15
+    enabled: true
+
+  - id: 5
+    name: "특정 소스 포트 차단"
+    src_ip: ""
+    src_port: 12345
+    dst_ip: ""
+    dst_port: 0
+    protocol: "tcp"
+    action: "drop"
+    priority: 30
     enabled: true

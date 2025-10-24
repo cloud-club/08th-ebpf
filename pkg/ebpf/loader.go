@@ -137,7 +137,7 @@ func (l *Loader) compileEBPF() (string, error) {
 	}
 	tmpFile.Close()
 
-	// clang 명령어 구성
+	// clang 명령어
 	clangArgs := []string{
 		"-O2", "-g", "-Wall", "-Werror",
 		"-target", "bpf",
@@ -202,6 +202,10 @@ func (l *Loader) UpdateRules(rules []*config.RoutingRule) error {
 			if srcIP == "" {
 				srcIP = "*"
 			}
+			srcPort := ""
+			if rule.SrcPort > 0 {
+				srcPort = fmt.Sprintf(":%d", rule.SrcPort)
+			}
 			dstIP := rule.DstIP
 			if dstIP == "" {
 				dstIP = "*"
@@ -220,14 +224,14 @@ func (l *Loader) UpdateRules(rules []*config.RoutingRule) error {
 				redirectInfo = fmt.Sprintf(" -> %s", rule.RedirectInterface)
 			}
 
-			fmt.Printf("  - 규칙 %d: %s %s -> %s%s (%s)%s [우선순위: %d]\n",
-				rule.ID, rule.Action, srcIP, dstIP, dstPort, protocol, redirectInfo, rule.Priority)
+			fmt.Printf("  - 규칙 %d: %s %s%s -> %s%s (%s)%s [우선순위: %d]\n",
+				rule.ID, rule.Action, srcIP, srcPort, dstIP, dstPort, protocol, redirectInfo, rule.Priority)
 		}
 	}
 	return nil
 }
 
-// eBPF 규칙 구조체 (C 구조체와 일치)
+// eBPF 규칙 구조체
 type EBPFRule struct {
 	ID                uint32
 	SrcIP             uint32
@@ -240,13 +244,13 @@ type EBPFRule struct {
 	Action            uint8
 	Priority          uint8
 	Enabled           uint8
-	RedirectInterface uint32 // 리다이렉트 대상 인터페이스 인덱스
+	RedirectInterface uint32
 }
 
 func (l *Loader) convertToEBPFRule(rule *config.RoutingRule) EBPFRule {
 	ebpfRule := EBPFRule{
 		ID:       uint32(rule.ID),
-		SrcPort:  uint16(0), // TODO: src_port 지원
+		SrcPort:  uint16(rule.SrcPort),
 		DstPort:  uint16(rule.DstPort),
 		Priority: uint8(rule.Priority),
 		Enabled:  uint8(1),
@@ -274,7 +278,7 @@ func (l *Loader) convertToEBPFRule(rule *config.RoutingRule) EBPFRule {
 	case "redirect":
 		ebpfRule.Action = 2
 	default:
-		ebpfRule.Action = 1 // 기본값: pass
+		ebpfRule.Action = 0
 	}
 
 	// 프로토콜 변환
@@ -289,7 +293,7 @@ func (l *Loader) convertToEBPFRule(rule *config.RoutingRule) EBPFRule {
 		ebpfRule.Protocol = 0 // any
 	}
 
-	// IP 주소 변환 (실제 CIDR 파싱)
+	// IP 주소 변환
 	if rule.SrcIP != "" {
 		srcIP, srcMask, err := parseCIDR(rule.SrcIP)
 		if err != nil {
@@ -327,7 +331,7 @@ func parseCIDR(cidr string) (uint32, uint32, error) {
 		return 0, 0, nil // 빈 문자열은 모든 IP 허용
 	}
 
-	// CIDR 표기법 파싱 (예: "192.168.1.0/24")
+	// CIDR 표기법 파싱
 	parts := strings.Split(cidr, "/")
 	if len(parts) == 1 {
 		// 단일 IP 주소인 경우 /32 마스크 적용
@@ -354,7 +358,7 @@ func parseCIDR(cidr string) (uint32, uint32, error) {
 		return 0, 0, fmt.Errorf("invalid mask bits: %s", parts[1])
 	}
 
-	// IP 주소를 uint32로 변환 (네트워크 바이트 순서)
+	// IP 주소를 uint32로 변환
 	ipUint32 := uint32(ipv4[0])<<24 | uint32(ipv4[1])<<16 | uint32(ipv4[2])<<8 | uint32(ipv4[3])
 
 	// 마스크 생성
