@@ -39,6 +39,7 @@ type RoutingRule struct {
 	ID                int    `yaml:"id" mapstructure:"id"`
 	Name              string `yaml:"name" mapstructure:"name"`
 	SrcIP             string `yaml:"src_ip" mapstructure:"src_ip"`
+	SrcPort           int    `yaml:"src_port" mapstructure:"src_port"`
 	DstIP             string `yaml:"dst_ip" mapstructure:"dst_ip"`
 	DstPort           int    `yaml:"dst_port" mapstructure:"dst_port"`
 	Protocol          string `yaml:"protocol" mapstructure:"protocol"`                     // 프로토콜 (tcp/udp/icmp)
@@ -142,8 +143,11 @@ func validateRoutingRule(rule *RoutingRule) error {
 	}
 
 	// 포트 검증
+	if rule.SrcPort < 0 || rule.SrcPort > 65535 {
+		return fmt.Errorf("잘못된 소스 포트 번호: %d", rule.SrcPort)
+	}
 	if rule.DstPort < 0 || rule.DstPort > 65535 {
-		return fmt.Errorf("잘못된 포트 번호: %d", rule.DstPort)
+		return fmt.Errorf("잘못된 목적지 포트 번호: %d", rule.DstPort)
 	}
 
 	// 프로토콜 검증

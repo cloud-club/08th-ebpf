@@ -49,7 +49,7 @@ struct routing_rule {
     __u8  action;
     __u8  priority;
     __u8  enabled;
-    __u32 redirect_interface; // 리다이렉트 대상 인터페이스 인덱스
+    __u32 redirect_interface;
 };
 
 // 통계 구조체
