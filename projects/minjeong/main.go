@@ -7,10 +7,13 @@ import (
 	"os/signal"
 	"syscall"
 
-	"ebpf-firewall/internal/bpf"
+	"ebpf-firewall/cmd"
+	"ebpf-firewall/pkg/bpf"
 )
 
 func main() {
+	cmd.Execute()
+
 	capture, err := bpf.NewPcapCapture()
 	if err != nil {
 		log.Fatalf("캡처 초기화 실패: %v", err)
