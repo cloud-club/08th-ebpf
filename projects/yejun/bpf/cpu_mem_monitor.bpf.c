@@ -3,11 +3,18 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 
+#define TASK_RUNNING        0
+#define TASK_INTERRUPTIBLE  1
+#define TASK_UNINTERRUPTIBLE 2
+
 char LICENSE[] SEC("license") = "GPL";
 
 struct cpu_event {
     u64 last_timestamp;
     u64 total_time_ns;
+    u64 switch_count;
+    u32 cpu_burst;
+    u32 io_burst;
 };
 
 struct fault_event {
@@ -40,15 +47,32 @@ int handle_sched_switch(struct trace_event_raw_sched_switch *ctx)
     if (prev_pid > 0) {
         struct cpu_event *evt = bpf_map_lookup_elem(&cpu_usage, &prev_pid);
         if (evt) {
-            u64 delta = ts - evt->last_timestamp;
-            evt->total_time_ns += delta;
-        }
+		u64 delta = ts - evt->last_timestamp;
+		evt->total_time_ns += delta;
+		__sync_fetch_and_add(&evt->switch_count, 1);
+	}
     }
 
     if (next_pid > 0) {
-        struct cpu_event evt = {};
-        evt.last_timestamp = ts;
-        bpf_map_update_elem(&cpu_usage, &next_pid, &evt, BPF_ANY);
+	struct cpu_event *evt = bpf_map_lookup_elem(&cpu_usage, &next_pid);
+	if (evt) {
+        	// 이미 있으면, switch_count 증가 + last_timestamp 갱신
+        	evt->last_timestamp = ts;
+		__sync_fetch_and_add(&evt->switch_count, 1);
+		// prev_state 기반으로 I/O burst 카운트
+                if (ctx->prev_state & (TASK_INTERRUPTIBLE | TASK_UNINTERRUPTIBLE)) {
+                        __sync_fetch_and_add(&evt->io_burst, 1);
+                }
+    	} else {
+        // 처음 들어오는 PID라면 새로 추가
+        struct cpu_event new_evt = {};
+        new_evt.last_timestamp = ts;
+        new_evt.switch_count = 0;
+	new_evt.total_time_ns = 0;
+	new_evt.cpu_burst = 0;
+	new_evt.io_burst = 0;
+        bpf_map_update_elem(&cpu_usage, &next_pid, &new_evt, BPF_ANY);
+    	}
     }
 
     return 0;

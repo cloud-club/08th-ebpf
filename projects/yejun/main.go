@@ -3,25 +3,41 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/rlimit"
 )
 
-// 구조체는 BPF C 코드에서 정의한 것과 동일하게 맞춰야 합니다
+// CPU 이벤트 구조체 (BPF와 동일하게)
 type cpuEvent struct {
 	LastTimestamp uint64
 	TotalTimeNs   uint64
+	SwitchCount   uint64
+	CPUburst      uint32
+	IOburst       uint32
 }
 
-type faultEvent struct {
-	UserFaults   uint64
-	KernelFaults uint64
+// PID의 command 이름을 가져오는 함수
+func getCmdName(pid uint32) string {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+	if err != nil {
+		return "unknown"
+	}
+	return string(data[:len(data)-1]) // 마지막 \n 제거
 }
 
 func main() {
-	// 1️⃣ BPF 오브젝트 로드
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("failed to remove memlock: %v", err)
+	}
+
+	// BPF 오브젝트 로드
 	spec, err := ebpf.LoadCollectionSpec("bpf/cpu_mem_monitor.bpf.o")
 	if err != nil {
 		log.Fatalf("failed to load BPF spec: %v", err)
@@ -34,41 +50,82 @@ func main() {
 	defer coll.Close()
 
 	cpuMap := coll.Maps["cpu_usage"]
-	pfMap := coll.Maps["page_faults"]
 
-	// 2️⃣ tracepoint attach
-	if _, err := link.Tracepoint("sched", "sched_switch", coll.Programs["handle_sched_switch"], nil); err != nil {
+	// tracepoint attach
+	tp, err := link.Tracepoint("sched", "sched_switch", coll.Programs["handle_sched_switch"], nil)
+	if err != nil {
 		log.Fatalf("failed to attach sched_switch: %v", err)
 	}
+	defer tp.Close()
 
-	if _, err := link.Tracepoint("exceptions", "page_fault_user", coll.Programs["handle_page_fault_user"], nil); err != nil {
-		log.Fatalf("failed to attach page_fault_user: %v", err)
-	}
+	numCPUs := runtime.NumCPU()
+	fmt.Printf("✅ eBPF program loaded. Monitoring sched_switch... (%d CPUs)\n", numCPUs)
 
-	if _, err := link.Tracepoint("exceptions", "page_fault_kernel", coll.Programs["handle_page_fault_kernel"], nil); err != nil {
-		log.Fatalf("failed to attach page_fault_kernel: %v", err)
-	}
+	interval := 5 * time.Second
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 
-	fmt.Println("BPF programs attached. Collecting metrics...")
+	// Ctrl+C 처리
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 
-	// 3️⃣ 주기적으로 map 읽어서 출력
 	for {
-		fmt.Println("----- CPU Usage -----")
-		var pid uint32
-		var evt cpuEvent
-		iter := cpuMap.Iterate()
-		for iter.Next(&pid, &evt) {
-			fmt.Printf("PID: %d, CPU time: %.6f sec\n", pid, float64(evt.TotalTimeNs)/1e9)
-		}
+		select {
+		case <-ticker.C:
+			fmt.Println("------ CPU/I/O Burst (last 5s) ------")
 
-		fmt.Println("----- Page Faults -----")
-		var pfEvt faultEvent
-		iter2 := pfMap.Iterate()
-		for iter2.Next(&pid, &pfEvt) {
-			fmt.Printf("PID: %d, User faults: %d, Kernel faults: %d\n", pid, pfEvt.UserFaults, pfEvt.KernelFaults)
-		}
+			printed := make(map[uint32]bool)
+			var pid uint32 = 0
+			for {
+				var nextPID uint32
+				if err := cpuMap.NextKey(pid, &nextPID); err != nil {
+					break
+				}
 
-		time.Sleep(2 * time.Second)
+				if printed[nextPID] {
+					pid = nextPID
+					continue
+				}
+				printed[nextPID] = true
+
+				var evt cpuEvent
+				if err := cpuMap.Lookup(nextPID, &evt); err != nil {
+					pid = nextPID
+					continue
+				}
+				total := evt.SwitchCount
+                		if total == 0 {
+                    			continue
+                		}
+                		ioRatio := float64(evt.IOburst) / float64(total) * 100
+				burstType := "I/O-bound"
+                		if ioRatio < 30 { // IO-burst 비율이 30% 미만이면 CPU-bound
+                  	  		burstType = "CPU-bound"
+                		}
+
+				cpuUsageRatio := float64(evt.TotalTimeNs) / (float64(interval.Nanoseconds()) * float64(numCPUs)) * 100
+				cmd := getCmdName(nextPID)
+
+				// CPU 40 % 점유 시 출력
+				if cpuUsageRatio > 40 {
+					fmt.Printf("[%s] I/O Switches: %-6d PID %-6d CMD: (%-15s) | CPU: %6.2f%% | Switches: %-5d\n",
+						burstType, evt.IOburst, nextPID, cmd, cpuUsageRatio * float64(numCPUs), evt.SwitchCount)
+				}
+
+				// map 초기화
+				if err := cpuMap.Delete(nextPID); err != nil {
+					log.Printf("failed to delete PID %d: %v", nextPID, err)
+				}
+
+				pid = nextPID
+			}
+
+			fmt.Println("-------------------------------------")
+
+		case <-sig:
+			fmt.Println("Exiting...")
+			return
+		}
 	}
 }
 
