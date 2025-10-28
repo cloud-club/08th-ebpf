@@ -1,7 +1,5 @@
 # eBPF 기반 Stateless 방화벽
 
-> 아직 미완성 상태로, 완성 이후 실행 화면을 추가할 예정입니다.
-
 ## 개요
 
 - 이 프로젝트는 Linux 커널의 eBPF 기술과 Go 언어를 활용하여 Stateless 방화벽을 구현합니다.
@@ -81,3 +79,7 @@ ebpfw default [allow|deny] [in|out]
 # 네트워크 패킷 모니터링 시작
 ebpfw monitor
 ```
+
+## 실행 결과
+
+![실행 결과](image.png)

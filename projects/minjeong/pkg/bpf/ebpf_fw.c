@@ -24,7 +24,7 @@
 #define PROTO_TCP 6
 #define PROTO_UDP 17
 
-#define MAX_RULES 1000
+#define MAX_RULES 30
 
 // 방화벽 규칙 구조체
 struct firewall_rule {
@@ -64,6 +64,9 @@ static __always_inline int match_rule(struct firewall_rule *rule,
                                        __u32 src_ip, __u32 dst_ip,
                                        __u16 port, __u8 protocol,
                                        __u8 direction) {
+    if (!rule)
+        return 0;
+    
     // 방향 검사
     if (rule->direction != direction)
         return 0;
@@ -112,15 +115,21 @@ int firewall_filter(struct __sk_buff *skb) {
         return TC_ACT_OK;
     
     // 포트 추출
-    __u16 sport = 0, dport = 0;
+    __u16 sport = 0;
+    __u16 dport = 0;
+
+    __u8 ihl = ip->ihl;
+    __u32 ip_hdr_len = ihl * 4;
+    void *l4_hdr = (void *)ip + ip_hdr_len;
+
     if (ip->protocol == IPPROTO_TCP) {
-        struct tcphdr *tcp = (void *)ip + (ip->ihl * 4);
+        struct tcphdr *tcp = l4_hdr;
         if ((void *)(tcp + 1) > data_end)
             return TC_ACT_OK;
         sport = bpf_ntohs(tcp->source);
         dport = bpf_ntohs(tcp->dest);
     } else if (ip->protocol == IPPROTO_UDP) {
-        struct udphdr *udp = (void *)ip + (ip->ihl * 4);
+        struct udphdr *udp = l4_hdr;
         if ((void *)(udp + 1) > data_end)
             return TC_ACT_OK;
         sport = bpf_ntohs(udp->source);
@@ -129,14 +138,17 @@ int firewall_filter(struct __sk_buff *skb) {
     
     // 패킷 방향 결정
     __u8 direction = (skb->ingress_ifindex != 0) ? DIR_INBOUND : DIR_OUTBOUND;
-    
-    // Inbound는 dport, Outbound는 sport 검사
-    __u16 check_port = (direction == DIR_INBOUND) ? dport : sport;
-    
+    __u16 check_port = dport;
+
+    __u32 src_ip = ip->saddr;
+    __u32 dst_ip = ip->daddr;
+    __u8 protocol = ip->protocol;
+
     // 규칙 순회 (First-Match)
-    #pragma unroll
+    #pragma clang loop unroll(full)
     for (__u32 i = 0; i < MAX_RULES; i++) {
-        struct firewall_rule *rule = bpf_map_lookup_elem(&rules_array, &i);
+        __u32 idx = i;
+        struct firewall_rule *rule = bpf_map_lookup_elem(&rules_array, &idx);
         
         if (!rule || rule->valid == 0)
             continue;
@@ -155,8 +167,11 @@ int firewall_filter(struct __sk_buff *skb) {
     // 어떤 규칙도 매칭되지 않으면 기본 정책 적용
     __u32 policy_key = direction;
     __u8 *default_action = bpf_map_lookup_elem(&default_policy, &policy_key);
+
+    if (!default_action)
+        return TC_ACT_SHOT;
     
-    if (default_action && *default_action == ACTION_ALLOW)
+    if (*default_action == ACTION_ALLOW)
         return TC_ACT_OK;
     
     return TC_ACT_SHOT;  // 기본: 차단

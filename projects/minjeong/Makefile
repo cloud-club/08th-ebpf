@@ -1,7 +1,7 @@
-.PHONY: all deps generate build run clean
+.PHONY: all deps generate build run clean 
 
 BIN_DIR := bin
-BIN := $(BIN_DIR)/ebpf_pcap
+BIN := $(BIN_DIR)/ebpfw
 
 all: build
 
@@ -15,7 +15,7 @@ generate: deps
 
 build: generate
 	@mkdir -p $(BIN_DIR)
-	@go build -o $(BIN) ./cmd/main.go
+	@go build -o $(BIN) ./main.go
 
 run:
 	@sudo ./$(BIN)

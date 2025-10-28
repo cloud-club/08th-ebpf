@@ -1,27 +1,45 @@
-/*
-Copyright © 2025 NAME HERE <EMAIL ADDRESS>
-
-*/
 package cmd
 
 import (
+	"ebpf-firewall/pkg/bpf"
 	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 )
 
-// monitorCmd represents the monitor command
 var monitorCmd = &cobra.Command{
 	Use:   "monitor",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "패킷 캡처 모니터링을 시작합니다",
+	Long:  "방화벽을 통과하는 패킷을 실시간으로 모니터링합니다.",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("monitor called")
+		// 패킷 캡처 초기화
+		capture, err := bpf.NewPcapCapture()
+		if err != nil {
+			log.Fatalf("캡처 초기화 실패: %v", err)
+		}
+		defer capture.Close()
+
+		// 시그널 핸들링 설정
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+
+		// 패킷 캡처 시작 (고루틴)
+		go func() {
+			if err := capture.Start(); err != nil {
+				log.Printf("캡처 실행 오류: %v", err)
+			}
+		}()
+
+		fmt.Println("[+] eBPF 패킷 캡처가 시작되었습니다.")
+		fmt.Println("[*] 중지하려면 Ctrl+C를 누르세요.")
+
+		// 시그널 대기
+		<-sig
+		fmt.Println("\n[!] eBPF 패킷 캡처가 중지되었습니다.")
 	},
 }
 
