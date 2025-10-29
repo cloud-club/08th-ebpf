@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"time"
 
+	"ebpf/bpf"
+
 	. "ebpf/model"
 	. "ebpf/util"
 
@@ -66,12 +68,18 @@ func Judge(data Data) (JudgeResult, error) {
 	var totalUsedMemory int64 = 0
 	testCaseCount := int64(len(data.Inputs))
 
+	manager, err := bpf.NewEBPFManager()
+	if err != nil {
+		return result, fmt.Errorf("eBPF 매니저 생성 실패: %w", err)
+	}
+	defer manager.Close()
+
 	for i := 0; i < len(data.Inputs); i++ {
 		inputContents := []byte(data.Inputs[i])
 		expectedOutput := []byte(data.Outputs[i])
 
 		runCmd := []string{"./out/execute"}
-		execResult, actualOutput, usedTime, usedMemory, err := executeProgram(runCmd, inputContents, data.TimeLimit, data.MemoryLimit, i+1)
+		execResult, actualOutput, usedTime, usedMemory, err := executeProgram(manager, runCmd, inputContents, data.TimeLimit, data.MemoryLimit, i+1)
 		if execResult == JudgeTimeOut {
 			result.Status = JudgeTimeOut
 			return result, nil
@@ -89,7 +97,7 @@ func Judge(data Data) (JudgeResult, error) {
 		}
 
 		fmt.Printf("사용 시간: %dms\n", usedTime)
-		fmt.Printf("사용 메모리: %dkb\n", 0)
+		fmt.Printf("사용 메모리: %d bytes\n", usedMemory)
 
 		totalUsedTime += usedTime
 		totalUsedMemory += usedMemory
@@ -101,7 +109,7 @@ func Judge(data Data) (JudgeResult, error) {
 	}
 
 	result.UsedTime = totalUsedTime / testCaseCount
-	result.UsedMemory = totalUsedMemory / testCaseCount
+	result.UsedMemory = totalUsedMemory
 
 	if isWrong {
 		result.Status = JudgeWrong
@@ -112,8 +120,11 @@ func Judge(data Data) (JudgeResult, error) {
 	return result, nil
 }
 
-func executeProgram(runCmd []string, inputContents []byte, timeLimit, memoryLimit int64, testCaseNum int) (JudgeStatusEnum, []byte, int64, int64, error) {
+func executeProgram(manager *bpf.EBPFManager, runCmd []string, inputContents []byte, timeLimit, memoryLimit int64, testCaseNum int) (JudgeStatusEnum, []byte, int64, int64, error) {
 	fmt.Printf("=====%d번 테스트케이스 실행 중=====\n", testCaseNum)
+
+	var err error // Declare err here
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeLimit)*time.Millisecond)
 	defer cancel()
 
@@ -126,34 +137,48 @@ func executeProgram(runCmd []string, inputContents []byte, timeLimit, memoryLimi
 	cmd.Stderr = &stderr
 
 	if err := cmd.Start(); err != nil {
-		fmt.Println(err)
 		return JudgeRuntimeError, nil, 0, 0, err
 	}
 
+	pid := uint32(cmd.Process.Pid)
+
+	// Start monitoring with the actual PID after the process has started
+	if err := manager.StartMonitoring(pid); err != nil {
+		return JudgeRuntimeError, nil, 0, 0, fmt.Errorf("메모리 모니터링 시작 실패: %w", err)
+	}
+
+	debugPIDs, debugErr := manager.GetDebugPIDs()
+	if debugErr != nil {
+		fmt.Fprintf(os.Stderr, "디버그 PID 조회 실패: %v\n", debugErr)
+	} else {
+		fmt.Printf("eBPF PID (from map): %d, Target PID (from map): %d\n", debugPIDs.EbpfPID, debugPIDs.TargetPID)
+	}
+
 	startTime := time.Now()
-	err := cmd.Wait()
+	err = cmd.Wait()
 	usedTime := time.Since(startTime).Milliseconds()
 
+	usedMemory, memErr := manager.GetPeakMemory(pid)
+	fmt.Printf("Monitoring PID: %d\n", pid)
+	if memErr != nil {
+		usedMemory = 0
+	}
+
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		fmt.Println(ctx.Err().Error())
-		return JudgeTimeOut, nil, usedTime, 0, ctx.Err()
+		return JudgeTimeOut, nil, usedTime, usedMemory, ctx.Err()
 	}
 
 	if err != nil {
-		runtimeError := fmt.Errorf("\n%w\n%s", err, stderr.String())
-		fmt.Println(runtimeError)
-		return JudgeRuntimeError, nil, usedTime, 0, err
+		runtimeError := fmt.Errorf("런타임 오류: %w, 상세 정보: %s", err, stderr.String())
+		return JudgeRuntimeError, nil, usedTime, usedMemory, runtimeError
 	}
 
 	if stderr.Len() > 0 {
-		runtimeError := fmt.Errorf("\n%s", stderr.String())
-		fmt.Println(runtimeError)
-		return JudgeRuntimeError, nil, usedTime, 0, errors.New(stderr.String())
+		return JudgeRuntimeError, nil, usedTime, usedMemory, fmt.Errorf("런타임 오류 발생: %s", stderr.String())
 	}
 
 	output := outputBuffer.Bytes()
-
-	return JudgeCorrect, output, usedTime, 0, nil
+	return JudgeCorrect, output, usedTime, usedMemory, nil
 }
 
 func checkDifference(executeContents, outputContents []byte) bool {

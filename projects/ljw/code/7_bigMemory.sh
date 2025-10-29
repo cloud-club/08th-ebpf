@@ -1,0 +1,3 @@
+#!/bin/sh
+
+curl -X POST http://localhost:1323/submit/1 -H "Content-Type: application/json" -d '{"code": "I2luY2x1ZGUgPHN0ZGlvLmg+CiNpbmNsdWRlIDxzdHJpbmcuaD4KCiNkZWZpbmUgQVJSQVlfU0laRSAxMDI0ICogMTAyNCAqIDEwIC8vIDEwTUIKCmludCBtYWluKCkgewogICAgaW50IGEsIGI7CiAgICBzY2FuZigiJWQgJWQiLCAmYSwgJmIpOwoKICAgIHZvbGF0aWxlIGNoYXIgYXJyW0FSUkFZX1NJWkVdOwogICAgbWVtc2V0KCh2b2lkKilhcnIsIDAsIEFSUkFZX1NJWkUpOwoKICAgIHByaW50ZigiJWQiLCBhICsgYik7CgogICAgcmV0dXJuIDA7Cn0K"}'
