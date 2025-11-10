@@ -6,6 +6,7 @@ Uses BCC (BPF Compiler Collection) to compile and load eBPF programs into the ke
 
 import os
 from bcc import BPF
+import ctypes as ct
 from pathlib import Path
 from typing import Optional, List, Dict, Callable
 import logging
@@ -103,7 +104,7 @@ class LatencyTracer:
         Set PID filter in eBPF map to only trace specific process.
         """
         pid_filter = self.bpf.get_table("pid_filter")
-        pid_filter[self.bpf.ctype.c_uint(self.pid)] = self.bpf.ctype.c_ubyte(1)
+        pid_filter[ct.c_uint(self.pid)] = ct.c_ubyte(1)
         self.logger.info(f"PID filter set to {self.pid}")
 
     def _attach_syscalls(self):

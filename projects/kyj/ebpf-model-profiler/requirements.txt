@@ -2,7 +2,7 @@
 # Python dependencies for the profiler
 
 # eBPF framework
-bcc>=0.18.0
+# bcc>=0.18.0
 
 # Metrics export
 prometheus-client>=0.12.0

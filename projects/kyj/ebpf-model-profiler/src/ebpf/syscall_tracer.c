@@ -4,7 +4,7 @@
 // It uses kprobe/kretprobe to hook into syscall entry and exit points.
 
 #include <uapi/linux/ptrace.h>
-#include <linux/sched.h>
+#include <linux/sched.h> // <--- PPID를 위해 sched.h 포함
 #include "common.h"
 
 // Hash map to store start timestamps keyed by thread ID
@@ -35,14 +35,23 @@ static inline int should_trace(u32 pid) {
  * This is called when a traced syscall is entered.
  * Records the entry timestamp for latency calculation.
  */
-int trace_syscall_enter(struct pt_regs *ctx) {
+static inline int trace_syscall_enter(struct pt_regs *ctx) {
     u64 pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = pid_tgid >> 32;
+    u32 pid = pid_tgid >> 32;   // current PID ..
     u32 tid = pid_tgid;
 
     // Check if we should trace this PID
     if (!should_trace(pid)) {
-        return 0;
+        // If current PID isn't traced, check if its Parent PID (PPID) is.
+        struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+        u32 ppid = 0;
+
+        // Safely read the parent's PID (tgid)
+        bpf_probe_read_kernel(&ppid, sizeof(ppid), &task->real_parent->tgid);
+
+        if (!should_trace(ppid)) {
+            return 0; // Neither PID nor PPID is traced, skip.
+        }
     }
 
     // Record start time for this thread
@@ -66,8 +75,15 @@ int trace_openat_exit(struct pt_regs *ctx) {
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
 
+    // Check if we should trace this PID or its Parent
     if (!should_trace(pid)) {
-        return 0;
+        struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+        u32 ppid = 0;
+        bpf_probe_read_kernel(&ppid, sizeof(ppid), &task->real_parent->tgid);
+
+        if (!should_trace(ppid)) {
+            return 0; // Neither PID nor PPID is traced, skip.
+        }
     }
 
     u64 *start_ts = start_times.lookup(&pid_tgid);
@@ -104,8 +120,15 @@ int trace_read_exit(struct pt_regs *ctx) {
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
 
+    // Check if we should trace this PID or its Parent
     if (!should_trace(pid)) {
-        return 0;
+        struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+        u32 ppid = 0;
+        bpf_probe_read_kernel(&ppid, sizeof(ppid), &task->real_parent->tgid);
+
+        if (!should_trace(ppid)) {
+            return 0; // Neither PID nor PPID is traced, skip.
+        }
     }
 
     u64 *start_ts = start_times.lookup(&pid_tgid);
@@ -142,8 +165,15 @@ int trace_write_exit(struct pt_regs *ctx) {
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
 
+    // Check if we should trace this PID or its Parent
     if (!should_trace(pid)) {
-        return 0;
+        struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+        u32 ppid = 0;
+        bpf_probe_read_kernel(&ppid, sizeof(ppid), &task->real_parent->tgid);
+
+        if (!should_trace(ppid)) {
+            return 0; // Neither PID nor PPID is traced, skip.
+        }
     }
 
     u64 *start_ts = start_times.lookup(&pid_tgid);
@@ -180,8 +210,15 @@ int trace_nanosleep_exit(struct pt_regs *ctx) {
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
 
+    // Check if we should trace this PID or its Parent
     if (!should_trace(pid)) {
-        return 0;
+        struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+        u32 ppid = 0;
+        bpf_probe_read_kernel(&ppid, sizeof(ppid), &task->real_parent->tgid);
+
+        if (!should_trace(ppid)) {
+            return 0; // Neither PID nor PPID is traced, skip.
+        }
     }
 
     u64 *start_ts = start_times.lookup(&pid_tgid);
@@ -218,8 +255,15 @@ int trace_sendto_exit(struct pt_regs *ctx) {
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
 
+    // Check if we should trace this PID or its Parent
     if (!should_trace(pid)) {
-        return 0;
+        struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+        u32 ppid = 0;
+        bpf_probe_read_kernel(&ppid, sizeof(ppid), &task->real_parent->tgid);
+
+        if (!should_trace(ppid)) {
+            return 0; // Neither PID nor PPID is traced, skip.
+        }
     }
 
     u64 *start_ts = start_times.lookup(&pid_tgid);
@@ -256,8 +300,15 @@ int trace_recvfrom_exit(struct pt_regs *ctx) {
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
 
+    // Check if we should trace this PID or its Parent
     if (!should_trace(pid)) {
-        return 0;
+        struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+        u32 ppid = 0;
+        bpf_probe_read_kernel(&ppid, sizeof(ppid), &task->real_parent->tgid);
+
+        if (!should_trace(ppid)) {
+            return 0; // Neither PID nor PPID is traced, skip.
+        }
     }
 
     u64 *start_ts = start_times.lookup(&pid_tgid);
@@ -294,8 +345,15 @@ int trace_sendmsg_exit(struct pt_regs *ctx) {
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
 
+    // Check if we should trace this PID or its Parent
     if (!should_trace(pid)) {
-        return 0;
+        struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+        u32 ppid = 0;
+        bpf_probe_read_kernel(&ppid, sizeof(ppid), &task->real_parent->tgid);
+
+        if (!should_trace(ppid)) {
+            return 0; // Neither PID nor PPID is traced, skip.
+        }
     }
 
     u64 *start_ts = start_times.lookup(&pid_tgid);
@@ -332,8 +390,15 @@ int trace_recvmsg_exit(struct pt_regs *ctx) {
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
 
+    // Check if we should trace this PID or its Parent
     if (!should_trace(pid)) {
-        return 0;
+        struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+        u32 ppid = 0;
+        bpf_probe_read_kernel(&ppid, sizeof(ppid), &task->real_parent->tgid);
+
+        if (!should_trace(ppid)) {
+            return 0; // Neither PID nor PPID is traced, skip.
+        }
     }
 
     u64 *start_ts = start_times.lookup(&pid_tgid);
@@ -370,8 +435,15 @@ int trace_fsync_exit(struct pt_regs *ctx) {
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = pid_tgid >> 32;
 
+    // Check if we should trace this PID or its Parent
     if (!should_trace(pid)) {
-        return 0;
+        struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+        u32 ppid = 0;
+        bpf_probe_read_kernel(&ppid, sizeof(ppid), &task->real_parent->tgid);
+
+        if (!should_trace(ppid)) {
+            return 0; // Neither PID nor PPID is traced, skip.
+        }
     }
 
     u64 *start_ts = start_times.lookup(&pid_tgid);
@@ -396,5 +468,6 @@ int trace_fsync_exit(struct pt_regs *ctx) {
     events.perf_submit(ctx, &event, sizeof(event));
     start_times.delete(&pid_tgid);
 
-    return 0;
+ 
+   return 0;
 }
