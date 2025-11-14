@@ -1,0 +1,163 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-gateway-config
+  namespace: kong
+data:
+  kong.conf: |
+    database = off
+    declarative_config = /kong/declarative/kong.yml
+    proxy_access_log = /dev/stdout
+    proxy_error_log = /dev/stderr
+    admin_access_log = /dev/stdout
+    admin_error_log = /dev/stderr
+    admin_listen = 0.0.0.0:8001
+    proxy_listen = 0.0.0.0:8000
+    real_ip_header = X-Real-IP
+    real_ip_recursive = on
+    trusted_ips = 0.0.0.0/0,::/0
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong-gateway-with-monitor
+  namespace: kong
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kong-gateway
+  template:
+    metadata:
+      labels:
+        app: kong-gateway
+    spec:
+      # Kong Gateway와 eBPF Monitor가 같은 Pod에서 실행
+      containers:
+      # Kong Gateway 메인 컨테이너
+      - name: kong-gateway
+        image: kong:3.4
+        ports:
+        - containerPort: 8000
+          name: proxy
+        - containerPort: 8001
+          name: admin
+        env:
+        - name: KONG_DATABASE
+          value: "off"
+        - name: KONG_DECLARATIVE_CONFIG
+          value: "/kong/declarative/kong.yml"
+        - name: KONG_PROXY_ACCESS_LOG
+          value: "/dev/stdout"
+        - name: KONG_PROXY_ERROR_LOG
+          value: "/dev/stderr"
+        - name: KONG_ADMIN_ACCESS_LOG
+          value: "/dev/stdout"
+        - name: KONG_ADMIN_ERROR_LOG
+          value: "/dev/stderr"
+        - name: KONG_ADMIN_LISTEN
+          value: "0.0.0.0:8001"
+        - name: KONG_PROXY_LISTEN
+          value: "0.0.0.0:8000"
+        volumeMounts:
+        - name: kong-config
+          mountPath: /kong/declarative
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /status
+            port: 8001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /status
+            port: 8001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+      # eBPF Monitor 사이드카 컨테이너
+      - name: kong-ebpf-monitor
+        image: kong-watcher:latest
+        securityContext:
+          privileged: true  # eBPF 프로그램 로드에 필요
+          capabilities:
+            add:
+            - SYS_ADMIN
+            - SYS_RESOURCE
+            - NET_ADMIN
+        env:
+        - name: LOG_LEVEL
+          value: "info"
+        - name: ENABLE_JSON_LOG
+          value: "true"
+        - name: KONG_PROCESS_NAME
+          value: "kong"
+        - name: STATS_INTERVAL
+          value: "30s"
+        # Kong Gateway 컨테이너와 프로세스 네임스페이스 공유
+        volumeMounts:
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+        - name: dev
+          mountPath: /host/dev
+          readOnly: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "pgrep kong-watcher"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+
+      volumes:
+      - name: kong-config
+        configMap:
+          name: kong-gateway-config
+      # 호스트 시스템 접근을 위한 볼륨 마운트
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: dev
+        hostPath:
+          path: /dev
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong-gateway-service
+  namespace: kong
+spec:
+  selector:
+    app: kong-gateway
+  ports:
+  - name: proxy
+    port: 8000
+    targetPort: 8000
+  - name: admin
+    port: 8001
+    targetPort: 8001
+  type: ClusterIP
